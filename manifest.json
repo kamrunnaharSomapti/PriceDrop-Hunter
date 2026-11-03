@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "PriceDrop Hunter",
+  "version": "0.1.0",
+  "description": "Privacy-first price history and sale detection. Everything stays in your browser.",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "PriceDrop Hunter",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

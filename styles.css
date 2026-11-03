@@ -1,0 +1,124 @@
+/* PriceDrop Hunter - popup styles (badge styles live in content.js, inside Shadow DOM) */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --surface-hover: #eef0f4;
+  --border: #e3e6eb;
+  --text: #1d2433;
+  --muted: #667085;
+  --accent: #2563eb;
+  --good: #12a150;
+  --bad: #d92d20;
+  --sale-bg: #fff4e5;
+  --sale-text: #b54708;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171c;
+    --surface: #1e2129;
+    --surface-hover: #262a34;
+    --border: #2d313b;
+    --text: #e8eaef;
+    --muted: #98a1b2;
+    --accent: #6ea0ff;
+    --good: #3ccf7e;
+    --bad: #ff6b5e;
+    --sale-bg: #3a2a12;
+    --sale-text: #ffb45c;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  width: 340px;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 8px;
+}
+
+h1 { margin: 0; font-size: 16px; }
+.count { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+
+.btn-danger {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--bad);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-danger:hover:not(:disabled) { background: var(--surface-hover); }
+.btn-danger:disabled { opacity: .4; cursor: default; }
+
+.tabs { display: flex; gap: 4px; padding: 0 14px 8px; border-bottom: 1px solid var(--border); }
+.tab {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.tab.active { background: var(--surface); color: var(--text); font-weight: 600; }
+
+.list {
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  outline: none;
+}
+.card:hover, .card:focus-visible { background: var(--surface-hover); border-color: var(--accent); }
+
+.info { flex: 1; min-width: 0; }
+.title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.site { color: var(--muted); font-size: 11px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.prices { display: flex; align-items: baseline; gap: 8px; margin-top: 4px; }
+.current { font-size: 14px; font-weight: 700; }
+.lowest { color: var(--muted); font-size: 11px; }
+.tag {
+  background: var(--sale-bg);
+  color: var(--sale-text);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.trend { flex-shrink: 0; }
+.spark { display: block; color: var(--muted); }
+.spark.down { color: var(--good); }
+.spark.up { color: var(--bad); }
+.spark-line { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.spark-dot { fill: currentColor; }
+
+.empty { color: var(--muted); text-align: center; padding: 24px 20px; margin: 0; }
+.footer { color: var(--muted); font-size: 11px; text-align: center; padding: 8px; border-top: 1px solid var(--border); }

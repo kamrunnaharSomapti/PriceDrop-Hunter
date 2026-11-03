@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PriceDrop Hunter</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <div>
+      <h1>PriceDrop Hunter</h1>
+      <p class="count" id="count">0 items tracked</p>
+    </div>
+    <button class="btn-danger" id="clear" type="button">Clear all</button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-filter="all" role="tab" type="button">All</button>
+    <button class="tab" data-filter="sale" role="tab" type="button">On sale <span id="sale-count"></span></button>
+  </nav>
+
+  <main id="list" class="list"></main>
+
+  <p class="empty" id="empty" hidden>
+    Nothing tracked yet. Open any product page in an online store and its price will be saved here.
+  </p>
+
+  <footer class="footer">Data stays in this browser only.</footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
