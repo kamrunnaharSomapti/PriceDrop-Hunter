@@ -4,20 +4,13 @@
  */
 'use strict';
 
-const KEY_PREFIX = 'p:';   // tracked products
-const STORE_PREFIX = 's:'; // stores with an ongoing sale
+const { KEY_PREFIX, STORE_PREFIX, SETTINGS_KEY, SOURCE_LABEL, formatPrice, activeSale, saveStoreSale,
+  describeSummary, categoryWords, siteOf, getSettings } = globalThis.PDH;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 let products = [];
 let stores = [];
 let filter = 'all';
-
-function formatPrice(value, currency) {
-  try {
-    if (currency) return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value);
-  } catch { /* unknown currency code */ }
-  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function timeAgo(iso) {
   const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -129,23 +122,30 @@ function card(product, index) {
   return item;
 }
 
-/** One store with an ongoing sale: item count, biggest discount, a few items. */
+/** One store with an ongoing sale: discount, where it was seen, top items. */
 function storeCard(store) {
+  const target = store.pageUrl || store.summary?.sourceUrl || store.website;
   const item = el('article', 'card store-card');
   item.tabIndex = 0;
-  item.title = store.pageUrl;
-  const open = () => chrome.tabs.create({ url: store.pageUrl });
+  item.title = target || '';
+  const open = () => target && chrome.tabs.create({ url: target });
   item.addEventListener('click', open);
   item.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
 
-  const maxOff = Math.max(...store.items.map((i) => i.percentOff));
   const info = el('div', 'info');
   const head = el('div', 'prices');
-  head.append(el('span', 'title', store.site));
-  head.append(el('span', 'tag', `up to ${maxOff}% off`));
+  head.append(el('span', 'title', store.name || store.site));
+  if (store.maxOff) head.append(el('span', 'tag', `${store.summary?.upTo || store.items.length ? 'up to ' : ''}${store.maxOff}% off`));
   info.append(head);
-  info.append(el('div', 'site', `${store.items.length} sale item${store.items.length === 1 ? '' : 's'} · seen ${timeAgo(store.lastSeen)}`));
 
+  const facts = [];
+  if (store.items.length) facts.push(`${store.items.length} sale item${store.items.length === 1 ? '' : 's'}`);
+  // The % is already in the tag; here just say until when and where it was seen.
+  if (store.summary) facts.push(`${describeSummary({ ...store.summary, percentOff: 0 })} (${SOURCE_LABEL[store.summary.source] || 'web'})`);
+  facts.push(`seen ${timeAgo(store.lastSeen)}`);
+  info.append(el('div', 'site', facts.join(' · ')));
+
+  if (store.summary?.note && !store.items.length) info.append(el('div', 'store-item', `“${store.summary.note}”`));
   const top = [...store.items].sort((a, b) => b.percentOff - a.percentOff).slice(0, 3);
   for (const sale of top) {
     const cur = sale.currency || store.currency;
@@ -158,7 +158,7 @@ function storeCard(store) {
 const EMPTY_TEXT = {
   all: 'Nothing tracked yet. Open any product page in an online store and its price will be saved here.',
   sale: 'No sales found yet among your tracked products.',
-  stores: 'No store sales yet. Open a store\'s sale page (or any page with crossed-out prices) and it will show up here.',
+  stores: 'No store sales yet. Open a store\'s sale page or its Facebook page, or add one below.',
 };
 
 function render() {
@@ -185,8 +185,9 @@ async function load() {
     .map(([, value]) => value)
     .sort((a, b) => new Date(b.lastChecked) - new Date(a.lastChecked));
   stores = Object.entries(all)
-    .filter(([key, value]) => key.startsWith(STORE_PREFIX) && value?.items?.length)
-    .map(([, value]) => value)
+    .filter(([key]) => key.startsWith(STORE_PREFIX))
+    .map(([, value]) => activeSale(value))
+    .filter(Boolean)
     .sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
   render();
 }
@@ -202,8 +203,96 @@ document.querySelectorAll('.tab').forEach((tab) => {
 document.getElementById('clear').addEventListener('click', async () => {
   if (!confirm(`Delete all ${products.length} tracked items and ${stores.length} store sales? This cannot be undone.`)) return;
   const all = await chrome.storage.local.get(null);
-  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith(KEY_PREFIX) || k.startsWith(STORE_PREFIX)));
+  await chrome.storage.local.remove(Object.keys(all)
+    .filter((k) => k.startsWith(KEY_PREFIX) || k.startsWith(STORE_PREFIX) || k.startsWith('ai:')));
   await load();
 });
 
+// ---------------------------------------------------------------------------
+// "This site has a sale" (manual entry for the current tab)
+// ---------------------------------------------------------------------------
+
+let currentTab = null;
+
+async function setupMarkForm() {
+  [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const details = document.getElementById('mark');
+  let url = null;
+  try { url = currentTab?.url ? new URL(currentTab.url) : null; } catch { /* no URL */ }
+  if (!url || !/^https?:$/.test(url.protocol)) {
+    details.hidden = true;
+    return;
+  }
+  document.getElementById('mark-site').textContent = siteOf(url.hostname);
+}
+
+document.getElementById('mark-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = new URL(currentTab.url);
+  const pct = Math.max(0, Math.min(95, Number(document.getElementById('mark-pct').value) || 0));
+  const endDate = document.getElementById('mark-end').value || null;
+  const category = document.getElementById('mark-cat').value;
+  await saveStoreSale({
+    site: url.hostname,
+    name: currentTab.title?.split(/[|–—-]/).pop().trim().slice(0, 60) || null,
+    pageUrl: currentTab.url,
+    summary: { percentOff: pct, upTo: document.getElementById('mark-upto').checked, endDate,
+      note: '', source: 'manual', sourceUrl: currentTab.url },
+    keywords: categoryWords(category),
+  });
+  document.getElementById('mark').open = false;
+  filter = 'stores';
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.filter === 'stores'));
+  await load();
+});
+
+// ---------------------------------------------------------------------------
+// On-device AI switch
+// ---------------------------------------------------------------------------
+
+async function renderAi() {
+  const statusEl = document.getElementById('ai-status');
+  const button = document.getElementById('ai-toggle');
+  const settings = await getSettings();
+  const status = await PDH_AI.status();
+  button.hidden = true;
+
+  if (status === 'unsupported' || status === 'unavailable') {
+    statusEl.textContent = 'Not available in this Chrome or on this computer (needs Chrome 138+, ~22 GB free disk, 16 GB RAM or a GPU). Normal sale detection still works.';
+    return;
+  }
+  if (status === 'downloading') {
+    statusEl.textContent = 'Downloading the model…';
+    return;
+  }
+  button.hidden = false;
+  if (status === 'downloadable') {
+    statusEl.textContent = 'Reads sale banners the normal rules miss. One-time model download (a few GB). Runs on this computer.';
+    button.textContent = 'Turn on';
+    return;
+  }
+  statusEl.textContent = settings.aiEnabled
+    ? 'On. Used only when a page mentions a sale the rules can\'t read.'
+    : 'Ready, but off.';
+  button.textContent = settings.aiEnabled ? 'Turn off' : 'Turn on';
+}
+
+document.getElementById('ai-toggle').addEventListener('click', async () => {
+  const settings = await getSettings();
+  const statusEl = document.getElementById('ai-status');
+  if (!settings.aiEnabled && await PDH_AI.status() !== 'available') {
+    statusEl.textContent = 'Downloading the model… you can close this popup.';
+    try {
+      await PDH_AI.enable((loaded) => { statusEl.textContent = `Downloading the model… ${Math.round(loaded * 100)}%`; });
+    } catch (err) {
+      statusEl.textContent = `Couldn't start the download: ${err.message}`;
+      return;
+    }
+  }
+  await chrome.storage.local.set({ [SETTINGS_KEY]: { ...settings, aiEnabled: !settings.aiEnabled } });
+  await renderAi();
+});
+
 load();
+setupMarkForm();
+renderAi();

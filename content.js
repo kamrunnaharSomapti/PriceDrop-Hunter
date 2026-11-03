@@ -9,8 +9,11 @@
  *   1. Store configs (Amazon today) with hand-written selectors.
  *   2. schema.org Product data (JSON-LD) that most online stores publish.
  *   3. Product meta tags (og/product:price, itemprop=price).
+ *   4. Visible page: one <h1> with a price next to it.
  *
- * Nothing leaves the browser.
+ * It also records store-wide sales: product grids with discounts, sale
+ * banners, and (optional) Chrome's on-device AI when the rules find nothing.
+ * Needs shared.js loaded first. Nothing leaves the browser.
  */
 (() => {
   'use strict';
@@ -18,9 +21,12 @@
   if (window.__priceDropHunterLoaded) return;
   window.__priceDropHunterLoaded = true;
 
+  const {
+    KEY_PREFIX, STORE_PREFIX, parsePrice, currencyFromText, formatPrice, keywords, wordMatch,
+    categoryWords, parseSaleText, today, siteOf, activeSale, saveStoreSale, describeSummary, getSettings, SOURCE_LABEL,
+  } = globalThis.PDH;
+
   const MAX_SNAPSHOTS = 365;
-  const KEY_PREFIX = 'p:';     // one tracked product
-  const STORE_PREFIX = 's:';   // one store's current sale items
   const RETRY_DELAYS_MS = [0, 1500, 4000]; // prices often render late
 
   // ---------------------------------------------------------------------------
@@ -60,54 +66,6 @@
     '[class*="was-price" i]', '[class*="original-price" i]', '[class*="old-price" i]',
     '[class*="regular-price" i]', '[class*="list-price" i]', '[class*="strike" i]',
   ].join(',');
-
-  // ---------------------------------------------------------------------------
-  // Price parsing
-  // ---------------------------------------------------------------------------
-
-  /** Turns "$1,299.99", "1.299,99 €", "Rs. 1,299" into a float, or null. */
-  function parsePrice(raw) {
-    if (raw == null) return null;
-    if (typeof raw === 'number') return raw > 0 ? raw : null;
-    const match = String(raw).replace(/[\s'’]/g, '').match(/\d[\d.,]*/);
-    if (!match) return null;
-    let s = match[0].replace(/[.,]$/, '');
-    const lastDot = s.lastIndexOf('.');
-    const lastComma = s.lastIndexOf(',');
-
-    if (lastDot !== -1 && lastComma !== -1) {
-      // Both present: whichever comes last is the decimal mark.
-      const dec = lastDot > lastComma ? '.' : ',';
-      const thou = dec === '.' ? ',' : '.';
-      s = s.split(thou).join('').replace(dec, '.');
-    } else if (lastComma !== -1) {
-      // Only commas: "12,99" is decimal, "1,299" / "1,299,000" is thousands.
-      const decimals = s.length - lastComma - 1;
-      s = (s.split(',').length === 2 && decimals !== 3) ? s.replace(',', '.') : s.split(',').join('');
-    } else if (s.split('.').length > 2) {
-      s = s.split('.').join(''); // "1.299.000"
-    }
-
-    const value = parseFloat(s);
-    return Number.isFinite(value) && value > 0 ? value : null;
-  }
-
-  const SYMBOL_TO_ISO = { '£': 'GBP', '€': 'EUR', '₹': 'INR', '¥': 'JPY', '৳': 'BDT', '₩': 'KRW', '₱': 'PHP', '₺': 'TRY', 'R$': 'BRL', 'C$': 'CAD', 'A$': 'AUD', '$': 'USD' };
-
-  const KNOWN_CURRENCIES = new Set(Intl.supportedValuesOf ? Intl.supportedValuesOf('currency') : []);
-
-  /** Best guess of currency from price text, e.g. "£12.00" -> GBP. */
-  function currencyFromText(text) {
-    if (!text) return null;
-    for (const [symbol, code] of Object.entries(SYMBOL_TO_ISO)) {
-      if (String(text).includes(symbol)) return code;
-    }
-    // Only real currency codes, so words like "VAT" or "GST" are ignored.
-    for (const [, code] of String(text).matchAll(/\b([A-Z]{3})\b/g)) {
-      if (KNOWN_CURRENCIES.has(code)) return code;
-    }
-    return null;
-  }
 
   // ---------------------------------------------------------------------------
   // DOM helpers
@@ -452,52 +410,84 @@
     return [...items.values()];
   }
 
-  const SALE_ITEM_TTL_DAYS = 14;
-  const MAX_SALE_ITEMS = 60;
+  // ---------------------------------------------------------------------------
+  // Store-wide sale announcements: banners, hero text, announcement bars.
+  // ---------------------------------------------------------------------------
 
-  /** Merges discounted items into this store's sale record. */
-  async function saveStoreSale(items) {
-    if (!items.length) return null;
-    const site = location.hostname.replace(/^www\./, '');
-    const key = STORE_PREFIX + site;
-    const stored = (await chrome.storage.local.get(key))[key];
-    const now = new Date().toISOString();
-    const cutoff = Date.now() - SALE_ITEM_TTL_DAYS * 86400000;
+  const BANNER_SELECTORS = [
+    '[class*="banner" i]', '[class*="hero" i]', '[class*="promo" i]', '[class*="slider" i]', '[class*="carousel" i]',
+    '[class*="announcement" i]', '[class*="marquee" i]', '[class*="topbar" i]', '[class*="notice" i]', '[id*="banner" i]',
+    'h1', 'h2', 'marquee',
+  ].join(',');
 
-    // Same product with different ?tracking=params is one item.
-    const urlKey = (u) => { try { const x = new URL(u); return x.origin + x.pathname.replace(/\/$/, ''); } catch { return u; } };
-    const byUrl = new Map((stored?.items || [])
-      .filter((it) => new Date(it.seen).getTime() > cutoff)
-      .map((it) => [urlKey(it.url), it]));
-    for (const it of items) byUrl.set(urlKey(it.url), { ...it, seen: now });
+  /** Visible banner text and image alt text that announce a sale, e.g. "Upto 70% off". */
+  function scanBanners() {
+    const texts = [];
+    for (const img of document.images) {
+      if (img.alt && img.alt.length < 300 && isVisible(img) && (img.width || 0) >= 250) texts.push(img.alt);
+    }
+    for (const el of document.querySelectorAll(BANNER_SELECTORS)) {
+      if (texts.length > 200) break;
+      if (!isVisible(el) || el.closest('a[href*="/product"]')) continue;
+      const text = el.textContent.replace(/\s+/g, ' ').trim();
+      if (text && text.length < 200) texts.push(text);
+    }
+    let best = null;
+    for (const text of texts) {
+      const found = parseSaleText(text);
+      // Banners must state a discount; a bare "Sale" link in a menu is not an ongoing sale.
+      if (!found?.percentOff) continue;
+      if (!best || found.percentOff > best.percentOff || (found.endDate && !best.endDate)) best = { ...found, note: text.slice(0, 140) };
+    }
+    return best;
+  }
 
-    const merged = [...byUrl.values()]
-      .sort((a, b) => new Date(b.seen) - new Date(a.seen) || b.percentOff - a.percentOff)
-      .slice(0, MAX_SALE_ITEMS);
+  // On-device AI (Chrome's built-in model), only when the rules found nothing.
+  const AI_RECHECK_MS = 6 * 3600000;
+  const PAGE_SALE_HINT_RE = /\b(sale|clearance)\b|\d{1,2}\s*%\s*off|\bdiscount|ছাড়|ছাড়|অফার|সেল/i;
 
-    // Remember the page that showed the most sale items (usually the store's sale page).
-    const bestPage = !stored || items.length >= (stored.bestPageCount || 0)
-      ? { url: location.href, count: items.length }
-      : { url: stored.pageUrl, count: stored.bestPageCount };
+  /** Largest visible image near the top, as a data: URL (for banners that are pictures). */
+  async function topBannerImage() {
+    const candidates = [...document.images]
+      .filter((img) => isVisible(img) && img.complete && img.naturalWidth >= 600 && img.getBoundingClientRect().top < 1500)
+      .sort((a, b) => b.naturalWidth * b.naturalHeight - a.naturalWidth * a.naturalHeight);
+    for (const img of candidates.slice(0, 2)) {
+      try {
+        const res = await fetch(img.currentSrc || img.src);
+        const blob = await res.blob();
+        if (!blob.type.startsWith('image/') || blob.size > 3_000_000) continue;
+        return await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+      } catch { /* cross-origin image: skip */ }
+    }
+    return null;
+  }
 
-    const record = {
-      site,
-      pageUrl: bestPage.url,
-      bestPageCount: bestPage.count,
-      currency: items.find((it) => it.currency)?.currency || stored?.currency || null,
-      items: merged,
-      firstSeen: stored?.firstSeen || now,
-      lastSeen: now,
-    };
-    await chrome.storage.local.set({ [key]: record });
-    return record;
+  async function aiReadPage() {
+    const settings = await getSettings();
+    if (!settings.aiEnabled) return null;
+    const text = document.body.innerText.replace(/\s+/g, ' ').slice(0, 4000);
+    if (!PAGE_SALE_HINT_RE.test(text + ' ' + [...document.images].map((i) => i.alt).join(' '))) return null;
+
+    const site = siteOf(location.hostname);
+    const checkKey = 'ai:' + site;
+    const lastCheck = (await chrome.storage.local.get(checkKey))[checkKey] || 0;
+    if (Date.now() - lastCheck < AI_RECHECK_MS) return null;
+    await chrome.storage.local.set({ [checkKey]: Date.now() });
+
+    const image = await topBannerImage();
+    const result = await chrome.runtime.sendMessage({ type: 'pdh-ai-read', site, url: location.href, title: document.title, text, image });
+    if (!result?.isSale) return null;
+    return result;
   }
 
   // ---------------------------------------------------------------------------
   // Storage
   // ---------------------------------------------------------------------------
-
-  const today = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 
   /** Saves today's snapshot (one per day) and returns the stored record. */
   async function saveSnapshot(product) {
@@ -565,13 +555,6 @@
     .close { margin-left: auto; cursor: pointer; border: 0; background: none; color: inherit; font-size: 14px; padding: 0 0 0 6px; opacity: .6; }
     .close:hover { opacity: 1; }
   `;
-
-  function formatPrice(value, currency) {
-    try {
-      if (currency) return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value);
-    } catch { /* unknown currency code */ }
-    return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
 
   function badgeContent(record) {
     const prices = record.history.map((h) => h.price);
@@ -655,10 +638,6 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Main loop: retry while the page renders, and re-run on SPA navigation.
-  // ---------------------------------------------------------------------------
-
-  // ---------------------------------------------------------------------------
   // Floating panels (toast + "sales on other sites"), also in Shadow DOM.
   // ---------------------------------------------------------------------------
 
@@ -715,9 +694,10 @@
   const SUGGEST_ID = 'pricedrop-hunter-suggest';
 
   /** Short confirmation on sale listing pages, hides itself. */
-  function showSaleToast(count, maxOff) {
+  function showSaleToast(count, maxOff, summary) {
     const { host, panel } = createPanel(TOAST_ID, { top: '16px', right: '16px' });
-    panel.append(panelHead(`🏷️ Sale found: ${count} item${count === 1 ? '' : 's'}, up to ${maxOff}% off`, () => host.remove()));
+    const what = count ? `${count} item${count === 1 ? '' : 's'}, up to ${maxOff}% off` : describeSummary(summary);
+    panel.append(panelHead(`🏷️ Sale found: ${what}`, () => host.remove()));
     const note = document.createElement('div');
     note.className = 'note';
     note.textContent = 'Saved by PriceDrop Hunter. You will see these when you shop for similar things on other sites.';
@@ -729,28 +709,6 @@
   // "Sales on other sites": match what the user is looking for against the
   // sale items saved from other stores.
   // ---------------------------------------------------------------------------
-
-  const STOP_WORDS = new Set(('the and for with from your you our all new sale off set pack size women womens woman ' +
-    'men mens man kids girls boys ladies free shipping best top buy shop online deal deals price cheap').split(' '));
-
-  /** handbags -> handbag, dresses -> dress, accessories -> accessory */
-  function stem(word) {
-    if (word.endsWith('ies') && word.length > 4) return word.slice(0, -3) + 'y';
-    if (word.endsWith('sses')) return word.slice(0, -2);
-    if (word.endsWith('s') && !word.endsWith('ss') && word.length > 3) return word.slice(0, -1);
-    return word;
-  }
-
-  function keywords(text) {
-    return [...new Set(String(text).toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-      .split(/\s+/)
-      .filter((w) => w.length >= 3 && !STOP_WORDS.has(w) && !/^\d+$/.test(w))
-      .map(stem))];
-  }
-
-  // "handbag" matches "bag", "kameez" matches "kameez".
-  const wordMatch = (a, b) => a === b || (b.length >= 3 && a.endsWith(b)) || (a.length >= 3 && b.endsWith(a));
 
   /** The search term in the URL, e.g. ?q=, ?k= (Amazon), ?keywords=, ?search_query=. */
   function currentSearchQuery() {
@@ -766,8 +724,10 @@
     const site = location.hostname.replace(/^www\./, '');
     const all = await chrome.storage.local.get(null);
     const results = [];
-    for (const [key, store] of Object.entries(all)) {
-      if (!key.startsWith(STORE_PREFIX) || store.site === site || !store.items?.length) continue;
+    for (const [key, raw] of Object.entries(all)) {
+      if (!key.startsWith(STORE_PREFIX)) continue;
+      const store = activeSale(raw);
+      if (!store || store.site === site || (store.website && siteOf(new URL(store.website).hostname) === site)) continue;
       const matches = store.items
         .map((item) => {
           const itemWords = keywords(item.title);
@@ -776,9 +736,11 @@
         })
         .filter((m) => m.score >= minMatches)
         .sort((a, b) => b.score - a.score || b.item.percentOff - a.item.percentOff);
-      if (matches.length) results.push({ store, matches });
+      // Store-wide sale (banner / Facebook / AI): match against the store's product words.
+      const storeWide = store.summary && words.some((w) => (store.keywords || []).some((k) => wordMatch(w, k)));
+      if (matches.length || storeWide) results.push({ store, matches, storeWide });
     }
-    return results.sort((a, b) => b.matches.length - a.matches.length).slice(0, 3);
+    return results.sort((a, b) => b.matches.length - a.matches.length || b.store.maxOff - a.store.maxOff).slice(0, 3);
   }
 
   function formatSite(site) {
@@ -800,27 +762,30 @@
     panel.append(panelHead(`🏷️ On sale on other sites for ${label}`, () => host.remove()));
 
     for (const { store, matches } of results) {
-      const best = matches[0].item;
-      const maxOff = Math.max(...matches.map((m) => m.item.percentOff));
+      const best = matches[0]?.item;
       const row = document.createElement('a');
       row.className = 'store';
-      row.href = matches.length > 1 ? store.pageUrl : best.url;
+      row.href = best ? (matches.length > 1 ? store.pageUrl : best.url) : (store.summary.sourceUrl || store.pageUrl || store.website);
       row.target = '_blank';
       row.rel = 'noopener noreferrer';
 
       const top = document.createElement('div');
       const name = document.createElement('span');
       name.className = 'name';
-      name.textContent = formatSite(store.site);
+      name.textContent = store.name || formatSite(store.site);
       const off = document.createElement('span');
       off.className = 'off';
-      off.textContent = ` · ${matches.length} item${matches.length === 1 ? '' : 's'}, up to ${maxOff}% off`;
+      off.textContent = best
+        ? ` · ${matches.length} item${matches.length === 1 ? '' : 's'}, up to ${Math.max(...matches.map((m) => m.item.percentOff))}% off`
+        : ` · ${describeSummary(store.summary)}`;
       top.append(name, off);
 
-      const item = document.createElement('div');
-      item.className = 'item';
-      item.textContent = `${best.title} — ${formatPrice(best.price, best.currency || store.currency)} (was ${formatPrice(best.was, best.currency || store.currency)})`;
-      row.append(top, item);
+      const detail = document.createElement('div');
+      detail.className = 'item';
+      detail.textContent = best
+        ? `${best.title} — ${formatPrice(best.price, best.currency || store.currency)} (was ${formatPrice(best.was, best.currency || store.currency)})`
+        : `Seen on ${SOURCE_LABEL[store.summary.source] || 'the web'}${store.summary.note ? ': ' + store.summary.note : ''}`;
+      row.append(top, detail);
       panel.append(row);
     }
 
@@ -836,10 +801,15 @@
 
   let runToken = 0;
 
-  async function processPage(token, isLastTry) {
+  async function processPage(token, tryIndex) {
+    const isLastTry = tryIndex === RETRY_DELAYS_MS.length - 1;
     const product = extractProduct();
     const saleItems = scanSaleItems();
-    if (!product && !saleItems.length && !isLastTry) return false;
+    if (!product && !saleItems.length && !isLastTry) {
+      // Search pages: suggest right away instead of waiting for the retries.
+      if (tryIndex === 0 && currentSearchQuery()) await showSuggestions(null);
+      return false;
+    }
 
     if (product) {
       const record = await saveSnapshot(product);
@@ -857,15 +827,38 @@
       }
     }
 
-    if (saleItems.length) {
-      await saveStoreSale(saleItems);
+    const site = siteOf(location.hostname);
+    const banner = scanBanners();
+    if (saleItems.length || banner) {
+      await saveStoreSale({
+        site,
+        pageUrl: location.href,
+        items: saleItems,
+        summary: banner ? { ...banner, source: 'page', sourceUrl: location.href } : null,
+        // Store's product words, so store-wide sales can match searches ("Lifestyle"/"Fashion" -> clothing words).
+        keywords: categoryWords(`${document.title} ${document.querySelector('meta[name="description"]')?.content || ''}`),
+      });
       // Only announce on listing pages; product pages already have the badge.
-      if (!product && saleItems.length >= 3 && token === runToken) {
-        showSaleToast(saleItems.length, Math.max(...saleItems.map((i) => i.percentOff)));
+      if (!product && (saleItems.length >= 3 || banner) && token === runToken) {
+        const maxOff = Math.max(banner?.percentOff || 0, ...saleItems.map((i) => i.percentOff));
+        showSaleToast(saleItems.length, maxOff, banner);
       }
     }
 
     if (token === runToken) await showSuggestions(product);
+
+    // Rules found nothing, but the page talks about a sale: ask the on-device AI.
+    if (!product && !saleItems.length && !banner && token === runToken) {
+      aiReadPage().then(async (ai) => {
+        if (!ai || token !== runToken) return;
+        const summary = { percentOff: ai.maxPercentOff || 0, upTo: !!ai.upTo, endDate: ai.endDate || null,
+          note: ai.summary || '', source: 'ai', sourceUrl: location.href };
+        const types = (ai.productTypes || []).join(' ');
+        await saveStoreSale({ site, pageUrl: location.href, summary,
+          keywords: [...keywords(types), ...categoryWords(types)] });
+        showSaleToast(0, summary.percentOff, summary);
+      }).catch((err) => console.debug('[PriceDrop Hunter] AI', err));
+    }
     return true;
   }
 
@@ -876,7 +869,7 @@
       setTimeout(async () => {
         if (done || token !== runToken) return;
         try {
-          done = await processPage(token, i === RETRY_DELAYS_MS.length - 1);
+          done = await processPage(token, i);
         } catch (err) {
           // Extension was reloaded or storage failed; stay quiet on the page.
           done = true;

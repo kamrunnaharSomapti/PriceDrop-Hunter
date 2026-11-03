@@ -22,12 +22,47 @@
 
   <main id="list" class="list"></main>
 
-  <p class="empty" id="empty" hidden>
-    Nothing tracked yet. Open any product page in an online store and its price will be saved here.
-  </p>
+  <p class="empty" id="empty" hidden></p>
+
+  <!-- Add a sale the extension missed, for the site in the current tab. -->
+  <details class="mark" id="mark">
+    <summary>➕ This site has a sale</summary>
+    <form id="mark-form">
+      <p class="mark-site" id="mark-site"></p>
+      <label>Discount %
+        <input id="mark-pct" type="number" min="1" max="95" placeholder="e.g. 50">
+      </label>
+      <label class="check"><input id="mark-upto" type="checkbox"> “Up to”</label>
+      <label>Ends on
+        <input id="mark-end" type="date">
+      </label>
+      <label>What's on sale
+        <select id="mark-cat">
+          <option value="clothing">Clothing</option>
+          <option value="shoes">Shoes</option>
+          <option value="bags">Bags</option>
+          <option value="beauty">Beauty</option>
+          <option value="electronics">Electronics</option>
+          <option value="home">Home</option>
+          <option value="">Other</option>
+        </select>
+      </label>
+      <button class="btn-primary" type="submit">Save sale</button>
+    </form>
+  </details>
+
+  <section class="ai" id="ai">
+    <div>
+      <strong>On-device AI reader</strong>
+      <p id="ai-status">Checking…</p>
+    </div>
+    <button class="btn-secondary" id="ai-toggle" type="button" hidden></button>
+  </section>
 
   <footer class="footer">Data stays in this browser only.</footer>
 
+  <script src="shared.js"></script>
+  <script src="ai.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

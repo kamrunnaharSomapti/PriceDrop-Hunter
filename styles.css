@@ -126,3 +126,25 @@ h1 { margin: 0; font-size: 16px; }
 .store-card .prices { margin-top: 0; justify-content: space-between; }
 .store-card .title { min-width: 0; }
 .store-item { color: var(--muted); font-size: 11px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Manual "this site has a sale" form */
+.mark { border-top: 1px solid var(--border); padding: 8px 14px; }
+.mark summary { cursor: pointer; color: var(--accent); font-weight: 600; list-style: none; }
+.mark summary::-webkit-details-marker { display: none; }
+.mark form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.mark label { display: flex; flex-direction: column; gap: 2px; color: var(--muted); font-size: 11px; }
+.mark label.check { flex-direction: row; align-items: center; gap: 6px; align-self: end; }
+.mark input, .mark select {
+  font: inherit; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px;
+}
+.mark-site { grid-column: 1 / -1; margin: 0; font-weight: 600; }
+.btn-primary, .btn-secondary {
+  font: inherit; font-size: 12px; border-radius: 6px; padding: 5px 10px; cursor: pointer;
+}
+.btn-primary { grid-column: 1 / -1; background: var(--accent); color: #fff; border: 0; }
+.btn-secondary { background: transparent; color: var(--accent); border: 1px solid var(--border); flex-shrink: 0; }
+
+/* On-device AI switch */
+.ai { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border); padding: 8px 14px; }
+.ai p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }

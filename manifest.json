@@ -1,9 +1,13 @@
 {
   "manifest_version": 3,
   "name": "PriceDrop Hunter",
-  "version": "0.1.0",
-  "description": "Privacy-first price history and sale detection. Everything stays in your browser.",
-  "permissions": ["storage"],
+  "version": "0.2.0",
+  "description": "Privacy-first price history and sale finder. Everything stays in your browser.",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "offscreen", "activeTab"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_title": "PriceDrop Hunter",
     "default_popup": "popup.html"
@@ -11,7 +15,13 @@
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
+      "exclude_matches": ["*://*.facebook.com/*"],
+      "js": ["shared.js", "content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.facebook.com/*"],
+      "js": ["shared.js", "facebook.js"],
       "run_at": "document_idle"
     }
   ]
