@@ -1,2 +1,5 @@
 node_modules/
 .DS_Store
+
+# Personal blog draft (not part of the extension)
+docs/blog-building-pricedrop-hunter.md
