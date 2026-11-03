@@ -6,3 +6,6 @@ docs/blog-building-pricedrop-hunter.md
 
 # Full saved copies of real store pages: local testing only, never commit (public repo)
 tests/fixtures/local/
+
+# Built Chrome Web Store zip (npm run package)
+dist/

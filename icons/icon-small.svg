@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Simplified logo for 16px: thicker handle, bigger bag and badge, no holes or highlight. -->
+  <path d="M40 44V34a24 24 0 0 1 48 0v10" fill="none" stroke="#14b8a6" stroke-width="16" stroke-linecap="round"/>
+  <path d="M14 40h100l4 72a14 14 0 0 1-14 15H24a14 14 0 0 1-14-15z" fill="#0f766e"/>
+  <circle cx="90" cy="92" r="36" fill="#f97316" stroke="#ffffff" stroke-width="8"/>
+  <path d="M90 72v34M76 94l14 14 14-14" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

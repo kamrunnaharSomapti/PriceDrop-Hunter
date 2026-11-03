@@ -157,7 +157,7 @@ h2 { font-size: clamp(1.7rem, 3.5vw, 2.4rem); }
 .browser-bar { display: flex; align-items: center; gap: 6px; padding: 10px 12px; background: var(--bg-alt); border-bottom: 1px solid var(--border); }
 .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--border); }
 .url { flex: 1; margin: 0 8px; background: var(--surface); border-radius: 999px; padding: 5px 14px; font-size: .8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ext-icon { position: relative; width: 26px; height: 26px; border-radius: 7px; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; font-weight: 800; font-size: .8rem; }
+.ext-icon { position: relative; width: 26px; height: 26px; display: grid; place-items: center; }
 .ext-count { position: absolute; top: -6px; right: -8px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--accent); color: #fff; font-size: .65rem; display: grid; place-items: center; border: 2px solid var(--bg-alt); }
 .ext-count.bump { animation: bump .4s; }
 @keyframes bump { 40% { transform: scale(1.35); } }
