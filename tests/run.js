@@ -37,7 +37,12 @@ const chrome = {
       remove: async (keys) => [].concat(keys).forEach((k) => delete storage[k]),
     },
   },
-  runtime: { sendMessage: async () => null },
+  runtime: {
+    // Stand-in for the on-device AI in background.js; tests can swap the answer.
+    aiCalls: [],
+    aiAnswer: null,
+    sendMessage: async (msg) => { chrome.runtime.aiCalls.push(msg); return chrome.runtime.aiAnswer; },
+  },
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -120,13 +125,16 @@ async function main() {
   console.log('\nSara-style sale page (mock)');
   ui = await visit('https://saralifestyle.com/sale', fixture('sara-sale-mock.html'));
   const sara = storage['s:saralifestyle.com'];
-  check('3 items from "Save ৳"/"% OFF" labels', sara?.items.length === 3, sara?.items);
+  check('4 items (crossed-out + "Save ৳"/"% OFF" labels)', sara?.items.length === 4, sara?.items.map((i) => i.title));
+  check('prices stripped from wrapped link name', sara?.items.some((i) => i.title === 'denim fashion tops' && i.price === 764 && i.was === 2545),
+    sara?.items.map((i) => i.title));
+  check('no item name contains a price', !sara?.items.some((i) => /৳|\d{3}/.test(i.title)), sara?.items.map((i) => i.title));
   check('jersey: 1505 was 2150', sara?.items.some((i) => i.title === 'Brazil Football Jersey' && i.price === 1505 && i.was === 2150));
   check('banner: up to 70% off', sara?.summary?.percentOff === 70 && sara?.summary?.upTo, sara?.summary);
   check('no false product badge on the sale page', ui.badge === null, ui.badge);
 
   // ---- Facebook brand page
-  console.log('\nFacebook brand page (mock)');
+  console.log('\nFacebook photo page, before the brand page was ever visited');
   // Dates relative to today so the test doesn't expire: current sale ends in 7 days, old one ended 30 days ago.
   const MONTH_NAMES = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
   const shift = (days) => new Date(Date.now() + days * 86400000);
@@ -134,13 +142,47 @@ async function main() {
   const fbHtml = fixture('facebook-artisan-mock.html')
     .replace('TILL 10th NOVEMBER', `TILL ${spoken(shift(7))}`)
     .replace('TILL 1st OCTOBER', `TILL ${spoken(shift(-30))}`);
+  const photoHtml = fixture('facebook-photo-mock.html').replace('TILL 10th NOVEMBER', `TILL ${spoken(shift(7))}`);
+  const PHOTO_URL = 'https://www.facebook.com/photo/?fbid=1107338685547628&set=a.113922921555881';
+  await visit(PHOTO_URL, photoHtml, { facebook: true, wait: 2000 });
+  const fbOnly = storage['s:facebook.com/artisanoutfittersltd'];
+  check('poster found from the photo page', fbOnly?.name === 'Artisan Outfitters', Object.keys(storage));
+  check('photo: 50% off, ends in 7 days', fbOnly?.summary?.percentOff === 50 && fbOnly?.summary?.endDate === shift(7).toLocaleDateString('en-CA'), fbOnly?.summary);
+  check('"Outfitters" in the name → clothing words', fbOnly?.keywords.includes('panjabi'), fbOnly?.keywords);
+
+  console.log('\nFacebook brand page (mock)');
   await visit('https://www.facebook.com/artisanoutfittersltd/', fbHtml, { facebook: true, wait: 2000 });
   const artisan = storage['s:artisanclick.com'];
+  check('photo-only record merged into the website record', !storage['s:facebook.com/artisanoutfittersltd'], Object.keys(storage));
   check('saved under the website from Intro', !!artisan, Object.keys(storage));
   check('flat 50% off, ends in 7 days (old ended post ignored)',
     artisan?.summary?.percentOff === 50 && artisan?.summary?.endDate === shift(7).toLocaleDateString('en-CA'), artisan?.summary);
   check('page name kept', artisan?.name === 'Artisan Outfitters', artisan?.name);
   check('clothing words attached', artisan?.keywords.includes('panjabi'), artisan?.keywords);
+
+  console.log('\nFacebook photo page, after the brand page was visited');
+  await visit(PHOTO_URL + '&x=2', photoHtml, { facebook: true, wait: 2000 });
+  check('saved straight to the website record', !storage['s:facebook.com/artisanoutfittersltd'] && storage['s:artisanclick.com']?.summary?.source === 'facebook',
+    Object.keys(storage).filter((k) => k.startsWith('s:')));
+  const storesBefore = Object.keys(storage).filter((k) => k.startsWith('s:')).length;
+  await visit('https://www.facebook.com/', '<html><body><div role="article"><img alt="May be an image of text that says \'FLAT 30% OFF\'"></div></body></html>', { facebook: true, wait: 2000 });
+  check('home feed post without a poster saves nothing', Object.keys(storage).filter((k) => k.startsWith('s:')).length === storesBefore);
+
+  console.log('\nFacebook photo with no readable text → on-device AI');
+  storage.settings = { aiEnabled: true };
+  chrome.runtime.aiAnswer = { isSale: true, maxPercentOff: 40, upTo: true, endDate: null, productTypes: ['saree', 'kurti'], summary: 'Up to 40% off sarees' };
+  await visit('https://www.facebook.com/photo/?fbid=999&set=a.1',
+    `<html><body><div role="dialog">
+      <img src="https://scontent.xx.fbcdn.net/v/sale.jpg" width="1200" height="1200" alt="May be an image of 1 person and saree">
+      <a href="https://www.facebook.com/yellowbd" role="link"><span>Yellow</span></a></div></body></html>`,
+    { facebook: true, wait: 4500 });
+  const call = chrome.runtime.aiCalls.find((c) => c.type === 'pdh-ai-read');
+  check('AI asked with the fbcdn image URL', call?.imageUrl === 'https://scontent.xx.fbcdn.net/v/sale.jpg', call);
+  const yellow = storage['s:facebook.com/yellowbd'];
+  check('AI answer saved: up to 40% off, from AI', yellow?.summary?.percentOff === 40 && yellow?.summary?.source === 'ai', yellow?.summary);
+  check('AI product words kept for matching', yellow?.keywords.includes('saree'), yellow?.keywords);
+  storage.settings = { aiEnabled: false };
+  chrome.runtime.aiAnswer = null;
 
   // ---- Suggestions on other sites
   console.log('\nSuggestions');

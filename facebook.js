@@ -163,7 +163,7 @@
     if (Date.now() - last < AI_RECHECK_MS) return null;
     await chrome.storage.local.set({ [checkKey]: Date.now() });
 
-    const text = document.body.innerText.replace(/\s+/g, ' ').slice(0, 2000);
+    const text = (document.body.innerText || document.body.textContent || '').replace(/\s+/g, ' ').slice(0, 2000);
     const result = await chrome.runtime.sendMessage({
       type: 'pdh-ai-read', site: 'facebook.com/' + identity.slug, url: location.href,
       title: `Facebook post by ${identity.name || identity.slug}`, text, imageUrl,

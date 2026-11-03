@@ -316,11 +316,34 @@
   const PERCENT_OFF_RE = /^(-\s*)?(\d{1,2})\s*%(\s*off)?$|^(save|up ?to|flat)?\s*(\d{1,2})\s*%\s*off$/i;
 
   /** A link text that is a product name, not a button, price or discount label. */
+  // Prices and discount labels that some stores put inside the product link.
+  const PRICE_IN_TEXT_RE = /(?:[$£€₹¥৳₩₱₺]|\b(?:tk|bdt|rs|inr|usd)\.?)\s*[\d][\d,.]*|[\d][\d,.]*\s*(?:৳|tk\b|bdt\b)/gi;
+  const LABEL_IN_TEXT_RE = /\b(?:you )?save\b\s*:?|\b\d{1,2}\s*%\s*(?:off)?|\bnew\b(?=\s*$)|\b(?:sale|sold out)\b(?=\s*$)|^\s*(?:new|sale)\b/gi;
+
+  /**
+   * Product name from a link. Some stores (e.g. SaRa) wrap the prices and the
+   * name in one link: "৳ 764৳2545denim fashion tops" -> "denim fashion tops".
+   */
+  function linkName(a) {
+    const named = a.querySelector('[class*="name" i], [class*="title" i], h2, h3, h4, h5');
+    const source = named && named.textContent.trim() ? named : a;
+    const clone = source.cloneNode(true);
+    clone.querySelectorAll('s, del, strike, [class*="price" i], [class*="amount" i], [class*="badge" i]')
+      .forEach((n) => n.remove());
+    return clone.textContent
+      .replace(PRICE_IN_TEXT_RE, ' ')
+      .replace(LABEL_IN_TEXT_RE, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/^[\s\-–—|·:,]+|[\s\-–—|·:,]+$/g, '')
+      .trim();
+  }
+
+  /** A link that carries a product name, not a button, price or discount label. */
   function isNameLink(a) {
-    const text = a.textContent.replace(/\s+/g, ' ').trim();
-    if (text.length < 3 || text.length > 150 || (a.getAttribute('href') || '').startsWith('#')) return false;
-    if (BUTTON_TEXT_RE.test(text) || SAVE_AMOUNT_RE.test(text) || PERCENT_OFF_RE.test(text)) return false;
-    return !/^\D{0,4}\s*[\d.,]+\s*\D{0,4}$/.test(text); // just a price
+    if ((a.getAttribute('href') || '').startsWith('#')) return false;
+    const text = linkName(a);
+    if (text.length < 3 || text.length > 150 || !/\p{L}{2}/u.test(text)) return false;
+    return !BUTTON_TEXT_RE.test(text);
   }
 
   /** Climbs from an element to the smallest product card with a named product link. */
@@ -329,8 +352,9 @@
     for (let i = 0; i < 8 && card && card !== document.body; i++, card = card.parentElement) {
       const link = [...card.querySelectorAll('a[href]')]
         .filter(isNameLink)
-        .sort((a, b) => b.textContent.trim().length - a.textContent.trim().length)[0];
-      if (link) return { card, link, title: link.textContent.replace(/\s+/g, ' ').trim() };
+        .map((a) => ({ a, name: linkName(a) }))
+        .sort((x, y) => y.name.length - x.name.length)[0];
+      if (link) return { card, link: link.a, title: link.name };
     }
     return null;
   }
@@ -470,7 +494,7 @@
   async function aiReadPage() {
     const settings = await getSettings();
     if (!settings.aiEnabled) return null;
-    const text = document.body.innerText.replace(/\s+/g, ' ').slice(0, 4000);
+    const text = (document.body.innerText || document.body.textContent || '').replace(/\s+/g, ' ').slice(0, 4000);
     if (!PAGE_SALE_HINT_RE.test(text + ' ' + [...document.images].map((i) => i.alt).join(' '))) return null;
 
     const site = siteOf(location.hostname);

@@ -74,7 +74,7 @@ var PDH_AI = (() => { // eslint-disable-line no-var, no-unused-vars
     };
   }
 
-  /** { title, url, text, image? (data: URL) } -> sale facts, or null if the model isn't ready. */
+  /** { title, url, text, image? (Blob or data: URL) } -> sale facts, or null if the model isn't ready. */
   async function readPage({ title, url, text, image }) {
     if (await status() !== 'available') return null;
 
@@ -83,7 +83,7 @@ var PDH_AI = (() => { // eslint-disable-line no-var, no-unused-vars
     if (image) {
       try {
         if (await LanguageModel.availability(IMAGE_OPTIONS) === 'available') {
-          imageBlob = await (await fetch(image)).blob();
+          imageBlob = image instanceof Blob ? image : await (await fetch(image)).blob();
           options = IMAGE_OPTIONS;
         }
       } catch { /* image input not supported here: text only */ }

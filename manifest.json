@@ -4,7 +4,14 @@
   "version": "0.2.0",
   "description": "Privacy-first price history and sale finder. Everything stays in your browser.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "offscreen", "activeTab"],
+  "permissions": [
+    "storage",
+    "offscreen",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://*.fbcdn.net/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -14,14 +21,27 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "exclude_matches": ["*://*.facebook.com/*"],
-      "js": ["shared.js", "content.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "exclude_matches": [
+        "*://*.facebook.com/*"
+      ],
+      "js": [
+        "shared.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://*.facebook.com/*"],
-      "js": ["shared.js", "facebook.js"],
+      "matches": [
+        "https://*.facebook.com/*"
+      ],
+      "js": [
+        "shared.js",
+        "facebook.js"
+      ],
       "run_at": "document_idle"
     }
   ]
