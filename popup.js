@@ -4,10 +4,12 @@
  */
 'use strict';
 
-const KEY_PREFIX = 'p:';
+const KEY_PREFIX = 'p:';   // tracked products
+const STORE_PREFIX = 's:'; // stores with an ongoing sale
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 let products = [];
+let stores = [];
 let filter = 'all';
 
 function formatPrice(value, currency) {
@@ -127,21 +129,53 @@ function card(product, index) {
   return item;
 }
 
+/** One store with an ongoing sale: item count, biggest discount, a few items. */
+function storeCard(store) {
+  const item = el('article', 'card store-card');
+  item.tabIndex = 0;
+  item.title = store.pageUrl;
+  const open = () => chrome.tabs.create({ url: store.pageUrl });
+  item.addEventListener('click', open);
+  item.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+
+  const maxOff = Math.max(...store.items.map((i) => i.percentOff));
+  const info = el('div', 'info');
+  const head = el('div', 'prices');
+  head.append(el('span', 'title', store.site));
+  head.append(el('span', 'tag', `up to ${maxOff}% off`));
+  info.append(head);
+  info.append(el('div', 'site', `${store.items.length} sale item${store.items.length === 1 ? '' : 's'} · seen ${timeAgo(store.lastSeen)}`));
+
+  const top = [...store.items].sort((a, b) => b.percentOff - a.percentOff).slice(0, 3);
+  for (const sale of top) {
+    const cur = sale.currency || store.currency;
+    info.append(el('div', 'store-item', `${sale.title} · ${formatPrice(sale.price, cur)} (−${sale.percentOff}%)`));
+  }
+  item.append(info);
+  return item;
+}
+
+const EMPTY_TEXT = {
+  all: 'Nothing tracked yet. Open any product page in an online store and its price will be saved here.',
+  sale: 'No sales found yet among your tracked products.',
+  stores: 'No store sales yet. Open a store\'s sale page (or any page with crossed-out prices) and it will show up here.',
+};
+
 function render() {
   const list = document.getElementById('list');
   const onSale = products.filter((p) => p.sale?.onSale);
-  const shown = filter === 'sale' ? onSale : products;
 
-  document.getElementById('count').textContent = `${products.length} item${products.length === 1 ? '' : 's'} tracked`;
+  document.getElementById('count').textContent =
+    `${products.length} item${products.length === 1 ? '' : 's'} tracked · ${stores.length} store${stores.length === 1 ? '' : 's'} on sale`;
   document.getElementById('sale-count').textContent = onSale.length ? `(${onSale.length})` : '';
-  document.getElementById('clear').disabled = products.length === 0;
+  document.getElementById('store-count').textContent = stores.length ? `(${stores.length})` : '';
+  document.getElementById('clear').disabled = products.length === 0 && stores.length === 0;
 
-  list.replaceChildren(...shown.map(card));
+  const cards = filter === 'stores' ? stores.map(storeCard) : (filter === 'sale' ? onSale : products).map(card);
+  list.replaceChildren(...cards);
   const empty = document.getElementById('empty');
-  empty.hidden = shown.length > 0;
-  empty.textContent = filter === 'sale' && products.length
-    ? 'No sales found yet among your tracked products.'
-    : 'Nothing tracked yet. Open any product page in an online store and its price will be saved here.';
+  empty.hidden = cards.length > 0;
+  empty.textContent = EMPTY_TEXT[filter];
 }
 
 async function load() {
@@ -150,6 +184,10 @@ async function load() {
     .filter(([key, value]) => key.startsWith(KEY_PREFIX) && value?.history?.length)
     .map(([, value]) => value)
     .sort((a, b) => new Date(b.lastChecked) - new Date(a.lastChecked));
+  stores = Object.entries(all)
+    .filter(([key, value]) => key.startsWith(STORE_PREFIX) && value?.items?.length)
+    .map(([, value]) => value)
+    .sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
   render();
 }
 
@@ -162,9 +200,9 @@ document.querySelectorAll('.tab').forEach((tab) => {
 });
 
 document.getElementById('clear').addEventListener('click', async () => {
-  if (!confirm(`Delete price history for all ${products.length} tracked items? This cannot be undone.`)) return;
-  const keys = (await chrome.storage.local.get(null));
-  await chrome.storage.local.remove(Object.keys(keys).filter((k) => k.startsWith(KEY_PREFIX)));
+  if (!confirm(`Delete all ${products.length} tracked items and ${stores.length} store sales? This cannot be undone.`)) return;
+  const all = await chrome.storage.local.get(null);
+  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith(KEY_PREFIX) || k.startsWith(STORE_PREFIX)));
   await load();
 });
 
