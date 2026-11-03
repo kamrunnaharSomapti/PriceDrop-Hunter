@@ -315,9 +315,10 @@
     const title = headings[0].textContent.replace(/\s+/g, ' ').trim();
     if (!title || title.length > 200) return null;
 
+    // Product-page signals: a buy button, or a SKU / product code shown near the title.
+    // (Some items are "in-store only" and have no buy button.)
     const hasBuyButton = [...document.querySelectorAll('button, input[type="submit"], a[role="button"]')]
       .some((b) => BUY_BUTTON_RE.test(b.textContent || b.value || ''));
-    if (!hasBuyButton) return null;
 
     let scope = headings[0];
     for (let i = 0; i < 3 && scope.parentElement; i++) {
@@ -328,9 +329,12 @@
         if (!text || text.length > 60) continue;
         const price = parsePrice(text);
         if (price == null) continue;
+        const originalPrice = findOriginalPriceNear(el, price);
+        const hasSku = /\b(SKU|product code|style (no|code)|item code)\b/i.test(scope.textContent.slice(0, 3000));
+        if (!hasBuyButton && !hasSku && !originalPrice) return null;
         const product = buildGeneric(title, price, currencyFromText(el.textContent), null, null);
         product.anchor = el;
-        product.originalPrice = findOriginalPriceNear(el, price);
+        product.originalPrice = originalPrice;
         return product;
       }
     }
@@ -349,12 +353,63 @@
 
   const BUTTON_TEXT_RE = /^(try on|quick ?view|quick ?shop|add to .*|buy now|order now|shop now|view( details| more)?|select options|choose options|details|more info|compare|wishlist)$/i;
 
+  // Discount labels like "Save ৳ 973", "You save $20", "70% off", "-30%".
+  const SAVE_AMOUNT_RE = /^(you )?save\s*:?\s*\D{0,4}\s*[\d][\d.,]*/i;
+  const PERCENT_OFF_RE = /^(-\s*)?(\d{1,2})\s*%(\s*off)?$|^(save|up ?to|flat)?\s*(\d{1,2})\s*%\s*off$/i;
+
+  /** A link text that is a product name, not a button, price or discount label. */
+  function isNameLink(a) {
+    const text = a.textContent.replace(/\s+/g, ' ').trim();
+    if (text.length < 3 || text.length > 150 || (a.getAttribute('href') || '').startsWith('#')) return false;
+    if (BUTTON_TEXT_RE.test(text) || SAVE_AMOUNT_RE.test(text) || PERCENT_OFF_RE.test(text)) return false;
+    return !/^\D{0,4}\s*[\d.,]+\s*\D{0,4}$/.test(text); // just a price
+  }
+
+  /** Climbs from an element to the smallest product card with a named product link. */
+  function findCard(start) {
+    let card = start.parentElement;
+    for (let i = 0; i < 8 && card && card !== document.body; i++, card = card.parentElement) {
+      const link = [...card.querySelectorAll('a[href]')]
+        .filter(isNameLink)
+        .sort((a, b) => b.textContent.trim().length - a.textContent.trim().length)[0];
+      if (link) return { card, link, title: link.textContent.replace(/\s+/g, ' ').trim() };
+    }
+    return null;
+  }
+
+  /** Current price inside a card: first short visible price-looking text that isn't a label. */
+  function findCardPrice(card, skip) {
+    const candidates = card.querySelectorAll('[class*="price" i], [class*="amount" i], span, div, p, strong, b');
+    for (const el of candidates) {
+      if (el === skip || el.contains(skip) || skip.contains(el) || !isVisible(el) || el.closest('s, del, strike')) continue;
+      if (el.children.length > 3) continue;
+      const text = textWithoutStrike(el);
+      if (!text || text.length > 30 || SAVE_AMOUNT_RE.test(text) || /%/.test(text)) continue;
+      if (!/[$£€₹¥৳₩₱₺]|\b(tk|bdt|rs|inr|usd|eur|gbp)\b|price|amount/i.test(text + ' ' + el.className)) continue;
+      const price = parsePrice(text);
+      if (price != null) return { price, text };
+    }
+    return null;
+  }
+
   /** Finds every product card on the page that shows a discount. */
   function scanSaleItems() {
     const items = new Map(); // url -> item
-    const strikes = document.querySelectorAll(ORIGINAL_PRICE_SELECTORS);
+    const add = (found, price, was, currencyText) => {
+      if (!found || price == null || was == null || price >= was || was > price * 10) return;
+      if (items.has(found.link.href)) return;
+      items.set(found.link.href, {
+        title: found.title.slice(0, 200),
+        url: found.link.href,
+        price,
+        was: Math.round(was * 100) / 100,
+        percentOff: Math.round((1 - price / was) * 100),
+        currency: currencyFromText(currencyText),
+      });
+    };
 
-    for (const strike of strikes) {
+    // 1. Crossed-out "was" prices.
+    for (const strike of document.querySelectorAll(ORIGINAL_PRICE_SELECTORS)) {
       if (items.size >= 100) break;
       if (!isVisible(strike) || strike.parentElement?.closest('s, del, strike')) continue;
       const strikeText = strike.textContent.trim();
@@ -369,29 +424,30 @@
         const text = textWithoutStrike(box);
         if (text.length <= 60) price = parsePrice(text);
       }
-      if (price == null || price >= was || was > price * 10) continue;
+      add(findCard(strike), price, was, strikeText);
+    }
 
-      // Card: smallest ancestor that has a product link with a name.
-      let card = strike.parentElement;
-      let link = null;
-      for (let i = 0; i < 8 && card && !link; i++, card = card.parentElement) {
-        link = [...card.querySelectorAll('a[href]')]
-          .filter((a) => a.textContent.trim().length > 2 && !a.getAttribute('href').startsWith('#'))
-          .sort((a, b) => b.textContent.trim().length - a.textContent.trim().length)[0] || null;
+    // 2. Discount labels ("Save ৳ 973", "70% off") when there's no crossed-out price.
+    for (const label of document.querySelectorAll('span, div, p, strong, b, em, small, mark')) {
+      if (items.size >= 100) break;
+      if (label.children.length > 2) continue;
+      const text = label.textContent.replace(/\s+/g, ' ').trim();
+      if (!text || text.length > 25) continue;
+      const saveMatch = SAVE_AMOUNT_RE.test(text);
+      const pctMatch = text.match(PERCENT_OFF_RE);
+      if (!saveMatch && !pctMatch) continue;
+      if (!isVisible(label)) continue;
+
+      const found = findCard(label);
+      if (!found || items.has(found.link.href)) continue;
+      const current = findCardPrice(found.card, label);
+      if (!current) continue;
+      if (saveMatch) {
+        add(found, current.price, current.price + parsePrice(text), text + ' ' + current.text);
+      } else {
+        const pct = Number(pctMatch[2] || pctMatch[5]);
+        if (pct > 0 && pct < 95) add(found, current.price, current.price / (1 - pct / 100), current.text);
       }
-      if (!link) continue;
-      const title = link.textContent.replace(/\s+/g, ' ').trim().slice(0, 200);
-      // Skip links that are prices or buttons ("Try On", "Quick view"), not product names.
-      if (title.length < 3 || title.length > 150 || BUTTON_TEXT_RE.test(title) || parsePrice(title) === price) continue;
-
-      items.set(link.href, {
-        title,
-        url: link.href,
-        price,
-        was,
-        percentOff: Math.round((1 - price / was) * 100),
-        currency: currencyFromText(strikeText),
-      });
     }
     return [...items.values()];
   }
@@ -408,10 +464,12 @@
     const now = new Date().toISOString();
     const cutoff = Date.now() - SALE_ITEM_TTL_DAYS * 86400000;
 
+    // Same product with different ?tracking=params is one item.
+    const urlKey = (u) => { try { const x = new URL(u); return x.origin + x.pathname.replace(/\/$/, ''); } catch { return u; } };
     const byUrl = new Map((stored?.items || [])
       .filter((it) => new Date(it.seen).getTime() > cutoff)
-      .map((it) => [it.url, it]));
-    for (const it of items) byUrl.set(it.url, { ...it, seen: now });
+      .map((it) => [urlKey(it.url), it]));
+    for (const it of items) byUrl.set(urlKey(it.url), { ...it, seen: now });
 
     const merged = [...byUrl.values()]
       .sort((a, b) => new Date(b.seen) - new Date(a.seen) || b.percentOff - a.percentOff)
