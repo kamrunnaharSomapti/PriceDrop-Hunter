@@ -99,27 +99,32 @@ async function main() {
   check('no sale in "100% cotton shirt"', parseSaleText('100% cotton shirt, 50% polyester') === null);
   check('no sale in "Free shipping over $50"', parseSaleText('Free shipping over $50') === null);
 
-  // ---- Le Reve: sale grid with crossed-out prices
-  console.log('\nLe Reve sale page');
-  let ui = await visit('https://lerevecraze.com/product-category/sale/', fixture('lereve-sale.html'));
+  // ---- Le Reve-style (mock): sale grid with crossed-out prices
+  console.log('\nLe Reve-style sale page (mock)');
+  let ui = await visit('https://lerevecraze.com/product-category/sale/', fixture('lereve-sale-mock.html'));
   const lereve = storage['s:lerevecraze.com'];
-  check('20 sale items saved', lereve?.items.length === 20, lereve?.items.length);
+  check('5 sale items saved', lereve?.items.length === 5, lereve?.items.map((i) => i.title));
+  check('short names like "Kameez" and "Gown" kept', ['Kameez', 'Gown'].every((n) => lereve?.items.some((i) => i.title === n)));
   check('currency is BDT (not "VAT")', lereve?.currency === 'BDT', lereve?.currency);
   check('first item correct', lereve?.items[0]?.price === 5440 && lereve?.items[0]?.was === 10879, lereve?.items[0]);
-  check('no button links saved as items', !lereve?.items.some((i) => /try on/i.test(i.title)));
-  check('toast shown', /Sale found: 20 items, up to 50% off/.test(ui.toast || ''), ui.toast);
+  check('toast shown', /Sale found: 5 items, up to 50% off/.test(ui.toast || ''), ui.toast);
 
-  console.log('\nLe Reve product page');
-  ui = await visit('https://lerevecraze.com/product/skd16345/', fixture('lereve-product.html'));
+  console.log('\nLe Reve-style product page (mock)');
+  ui = await visit('https://lerevecraze.com/product/skd16345/', fixture('lereve-product-mock.html'));
   const product = storage['p:lerevecraze.com:/product/skd16345/'];
   check('product saved with price + original', product?.price === 5440 && product?.originalPrice === 10879, product);
   check('badge shows 50% off', /On sale: 50% off/.test(ui.badge || ''), ui.badge);
+  check('"Try On" button not saved as a product name', !storage['s:lerevecraze.com'].items.some((i) => /try on/i.test(i.title)),
+    storage['s:lerevecraze.com'].items.map((i) => i.title));
+  check('related sale item added', storage['s:lerevecraze.com'].items.some((i) => i.title === 'Golden Brown Joom A-line Kameez'));
 
-  console.log('\nLe Reve in-store-only product (no Add to cart)');
+  console.log('\nLe Reve-style in-store-only product (no Add to cart)');
   delete storage['p:lerevecraze.com:/product/skd16345/'];
-  ui = await visit('https://lerevecraze.com/product/skd16345/?ref=x', fixture('lereve-product-instore.html'));
+  const itemCount = storage['s:lerevecraze.com'].items.length;
+  ui = await visit('https://lerevecraze.com/product/skd16345/?ref=x',
+    fixture('lereve-product-mock.html').replace('Add to cart', 'Check store availability'));
   check('still detected as a product', /On sale: 50% off/.test(ui.badge || ''), ui.badge);
-  check('no duplicate sale item from ?ref=', storage['s:lerevecraze.com'].items.length === 20, storage['s:lerevecraze.com'].items.length);
+  check('no duplicate sale item from ?ref=', storage['s:lerevecraze.com'].items.length === itemCount, storage['s:lerevecraze.com'].items.length);
 
   // ---- Sara-style: "Save ৳ X" labels + banner
   console.log('\nSara-style sale page (mock)');

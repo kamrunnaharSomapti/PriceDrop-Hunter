@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PriceDrop Hunter</title>
+  <meta name="description" content="A privacy-first Chrome extension that tracks prices, spots store-wide sales (even ones only posted on Facebook) and tells you about them while you shop anywhere else.">
+  <meta property="og:title" content="PriceDrop Hunter">
+  <meta property="og:description" content="Find the sale before you pay full price. Works on any store, reads Facebook sale posts, and keeps everything in your browser.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#0f766e">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#demo">Skip to the demo</a>
+
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top" aria-label="PriceDrop Hunter home">
+        <img src="favicon.svg" alt="" width="28" height="28">
+        <span>PriceDrop Hunter</span>
+      </a>
+      <nav class="nav-links" aria-label="Sections">
+        <a href="#demo">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <a class="btn btn-small" href="https://github.com/kamrunnaharSomapti/PriceDrop-Hunter" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- ============================== HERO ============================== -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Chrome extension · free · open source</p>
+          <h1>Find the sale <span class="hl">before</span> you pay full price.</h1>
+          <p class="lead">
+            Brands run sales on their websites, in banner images, and sometimes only on Facebook.
+            PriceDrop Hunter notices them as you browse, and the next time you search for something,
+            it tells you which stores have it on sale.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/kamrunnaharSomapti/PriceDrop-Hunter" target="_blank" rel="noopener">Get it on GitHub</a>
+            <a class="btn btn-ghost" href="#demo">See how it works ↓</a>
+          </div>
+          <p class="fine">Chrome Web Store listing coming soon. No account, no tracking, nothing leaves your browser.</p>
+        </div>
+
+        <!-- Hero visual: the suggestion card over a search page -->
+        <div class="hero-visual" aria-hidden="true">
+          <div class="mini-browser">
+            <div class="mini-bar"><span></span><span></span><span></span><div class="mini-url">bazaar.example/search?q=<b>panjabi</b></div></div>
+            <div class="mini-body">
+              <div class="mini-results">
+                <div class="ph"></div><div class="ph"></div><div class="ph"></div>
+                <div class="ph"></div><div class="ph"></div><div class="ph"></div>
+              </div>
+              <div class="pdh-card float-in">
+                <div class="pdh-card-head">🏷️ On sale on other sites for “panjabi”</div>
+                <div class="pdh-store"><b>Rongin Outfitters</b><span class="off"> · 40% off · until 15 Dec</span><small>Seen on Facebook</small></div>
+                <div class="pdh-store"><b>Nakshi Threads</b><span class="off"> · 3 items, up to 50% off</span><small>Cotton Panjabi — ৳ 1,750 (was ৳ 3,500)</small></div>
+                <div class="pdh-note">From sales you visited before. Stored only in your browser.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== DEMO ============================== -->
+    <section class="section" id="demo">
+      <div class="wrap">
+        <p class="eyebrow center">How it works</p>
+        <h2 class="center">Four things it does while you browse</h2>
+        <p class="sub center">Click a step, or let it play.</p>
+
+        <div class="demo">
+          <div class="steps" role="tablist" aria-label="Demo steps">
+            <button class="step active" role="tab" aria-selected="true" aria-controls="pane-1" id="tab-1" data-step="1">
+              <span class="num">1</span><span><b>Track prices</b><small>Every product page you open</small></span>
+            </button>
+            <button class="step" role="tab" aria-selected="false" aria-controls="pane-2" id="tab-2" data-step="2">
+              <span class="num">2</span><span><b>Spot store sales</b><small>Sale pages, banners, “Save ৳” labels</small></span>
+            </button>
+            <button class="step" role="tab" aria-selected="false" aria-controls="pane-3" id="tab-3" data-step="3">
+              <span class="num">3</span><span><b>Read Facebook posts</b><small>Even sales that are only an image</small></span>
+            </button>
+            <button class="step" role="tab" aria-selected="false" aria-controls="pane-4" id="tab-4" data-step="4">
+              <span class="num">4</span><span><b>Suggest while you shop</b><small>Search anywhere, see who has a sale</small></span>
+            </button>
+            <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+          </div>
+
+          <div class="browser">
+            <div class="browser-bar">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <div class="url" id="demo-url">rongin-outfitters.example/product/cotton-panjabi</div>
+              <div class="ext-icon" title="PriceDrop Hunter">P<span class="ext-count" id="ext-count" hidden>0</span></div>
+            </div>
+
+            <!-- Step 1: product page + price badge -->
+            <div class="pane active" id="pane-1" role="tabpanel" aria-labelledby="tab-1" data-url="rongin-outfitters.example/product/cotton-panjabi">
+              <div class="product">
+                <div class="product-img"><span>👘</span></div>
+                <div class="product-info">
+                  <p class="crumb">Home / Men / Panjabi</p>
+                  <h3>Embroidered Cotton Panjabi</h3>
+                  <p class="price">৳ 2,450 <del>৳ 3,500</del></p>
+                  <div class="badge-low pop">
+                    <b>🔥 Lowest Price Recorded Locally</b>
+                    <span class="sale">🏷️ On sale: 30% off (was ৳ 3,500)</span>
+                    <small>14 days of history · stored only in your browser</small>
+                  </div>
+                  <svg class="spark" viewBox="0 0 160 40" role="img" aria-label="Price fell over the last 14 days">
+                    <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".3"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+                    <path d="M4,8 L30,8 L56,12 L82,12 L108,20 L134,20 L156,34 L156,40 L4,40 Z" fill="url(#g1)"/>
+                    <polyline points="4,8 30,8 56,12 82,12 108,20 134,20 156,34" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                    <circle cx="156" cy="34" r="3" fill="currentColor"/>
+                  </svg>
+                  <button class="fake-btn" type="button" tabindex="-1">Add to cart</button>
+                </div>
+              </div>
+              <p class="caption">Opens a product page → the price is saved once a day → the badge tells you if it's the lowest price seen so far.</p>
+            </div>
+
+            <!-- Step 2: sale grid + toast -->
+            <div class="pane" id="pane-2" role="tabpanel" aria-labelledby="tab-2" data-url="nakshi-threads.example/sale" hidden>
+              <div class="grid-page">
+                <div class="banner">UPTO <b>50%</b> OFF · WINTER SALE</div>
+                <div class="cards">
+                  <div class="card"><div class="ci c1"><span class="tag">-50%</span></div><p>Cotton Panjabi</p><p class="p">৳ 1,750 <del>৳ 3,500</del></p></div>
+                  <div class="card"><div class="ci c2"><span class="tag">Save ৳ 900</span></div><p>Printed Kurti</p><p class="p">৳ 1,290</p></div>
+                  <div class="card"><div class="ci c3"><span class="tag">-40%</span></div><p>Silk Saree</p><p class="p">৳ 4,200 <del>৳ 7,000</del></p></div>
+                  <div class="card"><div class="ci c4"><span class="tag">-30%</span></div><p>Denim Jacket</p><p class="p">৳ 2,450 <del>৳ 3,500</del></p></div>
+                </div>
+              </div>
+              <div class="toast pop">🏷️ Sale found: <span id="sale-count">24</span> items, up to 50% off<small>Crossed-out prices, “Save ৳” labels and the banner all count.</small></div>
+              <p class="caption">Opens a sale page → every discounted item is saved, plus the store-wide “Upto 50% off” banner.</p>
+            </div>
+
+            <!-- Step 3: Facebook post -->
+            <div class="pane" id="pane-3" role="tabpanel" aria-labelledby="tab-3" data-url="facebook.com/kotha.lifestyle.example" hidden>
+              <div class="fb">
+                <div class="fb-head"><span class="avatar">K</span><div><b>Kotha Lifestyle</b><small>Page · Apparel &amp; clothing · 2d</small></div></div>
+                <p class="fb-text">Your favorites, now with more time to shop!</p>
+                <div class="poster" role="img" aria-label="Sale poster: Mega sale, flat 40% off, till 15 December">
+                  <span class="poster-small">MEGA</span>
+                  <span class="poster-big">SALE</span>
+                  <span class="poster-pct">FLAT 40% OFF</span>
+                  <span class="poster-date">TILL 15<sup>th</sup> DECEMBER</span>
+                  <div class="scan-beam" aria-hidden="true"></div>
+                </div>
+              </div>
+              <div class="reader pop">
+                <b>Read from the image description</b>
+                <code id="fb-read" data-text="“MEGA SALE FLAT 40% OFF TILL 15th DECEMBER”">“MEGA SALE FLAT 40% OFF TILL 15th DECEMBER”</code>
+                <span class="saved">→ Kotha Lifestyle · 40% off · until 15 Dec · clothing</span>
+              </div>
+              <p class="caption">Facebook describes images for screen readers. The extension reads that text, or asks Chrome's on-device AI to read the image.</p>
+            </div>
+
+            <!-- Step 4: suggestion on another site -->
+            <div class="pane" id="pane-4" role="tabpanel" aria-labelledby="tab-4" data-url="bazaar.example/search?q=panjabi" hidden>
+              <div class="search-page">
+                <div class="searchbox">🔍 <span id="typed">panjabi</span><span class="caret" aria-hidden="true"></span></div>
+                <div class="results">
+                  <div class="r"><div class="ri"></div><p>Men's Panjabi</p><p class="p">৳ 2,900</p></div>
+                  <div class="r"><div class="ri"></div><p>Eid Collection</p><p class="p">৳ 3,400</p></div>
+                  <div class="r"><div class="ri"></div><p>Linen Panjabi</p><p class="p">৳ 2,650</p></div>
+                </div>
+              </div>
+              <div class="pdh-card pop corner">
+                <div class="pdh-card-head">🏷️ On sale on other sites for “panjabi”</div>
+                <div class="pdh-store"><b>Nakshi Threads</b><span class="off"> · 1 item, 50% off</span><small>Cotton Panjabi — ৳ 1,750 (was ৳ 3,500)</small></div>
+                <div class="pdh-store"><b>Kotha Lifestyle</b><span class="off"> · 40% off · until 15 Dec</span><small>Seen on Facebook</small></div>
+                <div class="pdh-store"><b>Rongin Outfitters</b><span class="off"> · 30% off</span><small>Embroidered Cotton Panjabi — ৳ 2,450</small></div>
+              </div>
+              <p class="caption">Searches anywhere, on any shop or Google → stores with a matching sale show up in the corner.</p>
+            </div>
+
+            <!-- Animated pointer used by app.js -->
+            <svg class="cursor" id="cursor" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <path d="M4 2l15 9-6.5 1.6L9.6 19z" fill="#111827" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== FEATURES ============================== -->
+    <section class="section alt" id="features">
+      <div class="wrap">
+        <p class="eyebrow center">Features</p>
+        <h2 class="center">Built for how people actually shop</h2>
+        <div class="features">
+          <article class="feature"><span class="ico">🛍️</span><h3>Works on any store</h3><p>No store list to set up. It reads the product data most shops publish, and falls back to the visible page for the rest.</p></article>
+          <article class="feature"><span class="ico">📉</span><h3>Price history</h3><p>One price a day per product, a small chart, and a clear verdict: lowest, highest, or normal for this item.</p></article>
+          <article class="feature"><span class="ico">📣</span><h3>Facebook sale posts</h3><p>Reads sale posts and photos on brand pages (logged in or not) and links them to the brand's website.</p></article>
+          <article class="feature"><span class="ico">🧠</span><h3>On-device AI, optional</h3><p>For banners the rules can't read, Chrome's built-in AI reads them on your computer. Off by default.</p></article>
+          <article class="feature"><span class="ico">৳</span><h3>Made for Bangladesh</h3><p>Understands ৳ and Tk prices, “+ VAT”, Bangla digits and words like ছাড় and অফার.</p></article>
+          <article class="feature"><span class="ico">✍️</span><h3>Add what it missed</h3><p>Saw a sale it didn't catch? Add the discount and end date in two clicks from the popup.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== PRIVACY ============================== -->
+    <section class="section" id="privacy">
+      <div class="wrap privacy">
+        <div>
+          <p class="eyebrow">Privacy</p>
+          <h2>Nothing leaves your browser.</h2>
+          <p class="sub">There is no PriceDrop Hunter server. The extension only learns from pages you open yourself, and keeps what it learns in your own Chrome profile.</p>
+        </div>
+        <ul class="checks">
+          <li><b>No account</b> and no sign-up.</li>
+          <li><b>No server, no analytics</b>, no tracking pixels.</li>
+          <li><b>Stored locally</b> in <code>chrome.storage.local</code>. Clear it any time.</li>
+          <li><b>AI runs on your device.</b> Chrome's built-in model, nothing uploaded.</li>
+          <li><b>Open source.</b> Read every line on GitHub.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============================== UNDER THE HOOD ============================== -->
+    <section class="section alt">
+      <div class="wrap">
+        <p class="eyebrow center">Under the hood</p>
+        <h2 class="center">Rules first, AI only when needed</h2>
+        <ol class="flow">
+          <li><b>Store data</b><span>schema.org product info that most shops publish for Google</span></li>
+          <li><b>Page patterns</b><span>crossed-out prices, “Save ৳ X”, “% off” labels, sale banners</span></li>
+          <li><b>Facebook text</b><span>post text plus Facebook's automatic image descriptions</span></li>
+          <li><b>On-device AI</b><span>only if a page mentions a sale and nothing above could read it</span></li>
+        </ol>
+        <p class="sub center">Plain JavaScript, Chrome Manifest V3, no frameworks. Tested against saved store pages on every change.</p>
+      </div>
+    </section>
+
+    <!-- ============================== FAQ ============================== -->
+    <section class="section" id="faq">
+      <div class="wrap faq">
+        <h2 class="center">Questions</h2>
+        <details><summary>Do I need to log in to Facebook?</summary><p>No. It reads brand pages and photos whether you're logged in or not.</p></details>
+        <details><summary>Which stores does it work with?</summary><p>Any online store you visit. It has extra rules for Amazon and handles most Shopify, WooCommerce and custom-built shops automatically.</p></details>
+        <details><summary>Will it find sales on stores I've never visited?</summary><p>Not yet. Because there's no server, it only knows about stores (or Facebook pages) you've opened at least once. A background re-check of saved stores is planned.</p></details>
+        <details><summary>What does the on-device AI need?</summary><p>Chrome 138 or newer and a reasonably recent computer (about 22 GB of free disk, and 16 GB of RAM or a GPU). Without it, everything else still works.</p></details>
+        <details><summary>Does it change prices or add affiliate links?</summary><p>No. It only reads pages and shows small notes. It never edits links or adds referral codes.</p></details>
+      </div>
+    </section>
+
+    <!-- ============================== CTA ============================== -->
+    <section class="cta">
+      <div class="wrap cta-inner">
+        <h2>Stop missing the sale you'd have wanted.</h2>
+        <a class="btn btn-light" href="https://github.com/kamrunnaharSomapti/PriceDrop-Hunter" target="_blank" rel="noopener">Get PriceDrop Hunter</a>
+        <p>Install from GitHub: download, open <code>chrome://extensions</code>, turn on Developer mode, then “Load unpacked”.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <span>© 2026 PriceDrop Hunter · Built by <a href="https://github.com/kamrunnaharSomapti" target="_blank" rel="noopener">Somapti</a></span>
+      <span>Store names in the demo are made up.</span>
+    </div>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

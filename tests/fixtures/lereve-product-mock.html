@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- Small mock of a Next.js fashion store's product page (modeled on lerevecraze.com/product/...).
+     Keeps the tricky bits: content streamed into <div hidden id="S:1">, no product data for Google,
+     "+ VAT" next to the price, a "Try On" link with the crossed-out price nearby, and a related-items card. -->
+<html lang="en"><head><meta charset="utf-8"><title>Magenta Anarkali style Gown with Dupatta | Le Reve</title>
+<meta property="og:type" content="website"></head>
+<body>
+<header><a href="/">le reve</a><nav><a href="/women">Women</a><a href="/product-category/sale/">Sale</a></nav></header>
+<div hidden id="S:1"><div class="container-fluid">
+  <nav class="wc-breadcrumb"><a href="/">Home</a> / <a href="/nargisus/">Nargisus</a> / <span>Magenta Anarkali style Gown with Dupatta</span></nav>
+  <div class="row">
+    <div class="col-12 col-lg-8"><img alt="" src="/img/1-large.jpg"></div>
+    <div class="col-12 col-lg-4 product-details-area">
+      <h1 class="m-0 lrv-fs-16 product-title mb-2">Magenta Anarkali style Gown with Dupatta</h1>
+      <div class="price"><span class="amount">৳ 5440 </span><span class="text-lrv-lightgray lrv-fs-16"> + VAT</span><del class="price-regular text-danger"><span class="amount"> ৳ 10879</span></del></div>
+      <div class="d-flex product-code text-lrv-lightgray pt-2">SKU: SKD16345</div>
+      <div class="mb-3 d-flex gap-3 action-area-btn">
+        <a target="_blank" class="btn-try" href="/virtual-trial-room/SKD16345/"><img src="/icons/try.svg" alt="Try online" width="16" height="16">Try On</a>
+        <button type="button" class="bg-lrv-dark-yellow">Add to cart</button>
+      </div>
+    </div>
+  </div>
+  <section class="related">
+    <h2>You may also like</h2>
+    <div class="col p-0 lrv-product-grid">
+      <div class="embla"><a href="/product/lkz17001/"><div class="lrv-sale-badge">50% Off</div><img alt="" src="/img/r1.jpg"></a></div>
+      <div class="text-truncate"><a href="/product/lkz17001/">Golden Brown Joom A-line Kameez</a>
+        <div class="price"><span class="amount">৳ 4184 </span><span> + VAT</span><del class="price-regular text-danger"><span class="amount"> ৳ 8367</span></del></div></div>
+    </div>
+  </section>
+</div></div>
+</body></html>

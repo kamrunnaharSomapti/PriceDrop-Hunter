@@ -350,6 +350,9 @@
   function findCard(start) {
     let card = start.parentElement;
     for (let i = 0; i < 8 && card && card !== document.body; i++, card = card.parentElement) {
+      // Two crossed-out prices inside means we've climbed past one product card.
+      const strikes = [...card.querySelectorAll(ORIGINAL_PRICE_SELECTORS)].filter((s) => parsePrice(s.textContent) != null);
+      if (strikes.length > 1) return null;
       const link = [...card.querySelectorAll('a[href]')]
         .filter(isNameLink)
         .map((a) => ({ a, name: linkName(a) }))

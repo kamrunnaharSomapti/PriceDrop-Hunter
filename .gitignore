@@ -3,3 +3,6 @@ node_modules/
 
 # Personal blog draft (not part of the extension)
 docs/blog-building-pricedrop-hunter.md
+
+# Full saved copies of real store pages: local testing only, never commit (public repo)
+tests/fixtures/local/
