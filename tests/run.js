@@ -207,6 +207,34 @@ async function main() {
   await visit('https://blog.example.com/trip', '<html><body><h1>My trip to the market</h1><p>Everything was 50% off at the bazaar.</p></body></html>', { wait: 4500 });
   check('blog post saves nothing', Object.keys(storage).length === before, Object.keys(storage));
 
+  // ---- Amazon-style search results: the review link sits next to the price, the title further up
+  console.log('\nAmazon-style search results (mock)');
+  // `discount` is either a crossed-out price or a "-50%" label, to cover both ways items are found.
+  const amazonCard = (asin, title, price, discount) => `
+    <div class="s-result-item" data-asin="${asin}">
+      <div class="title-recipe"><a class="a-link-normal" href="/x/dp/${asin}/"><h2 aria-label="${title}"><span>${title}</span></h2></a></div>
+      <div class="a-section">
+        <span class="a-declarative"><a href="javascript:void(0)" role="button" aria-label="4.5 out of 5 stars, rating details"><i class="a-icon-star"><span class="a-icon-alt">4.5 out of 5 stars</span></i></a></span>
+        <a aria-label="See customer reviews" href="/x/dp/${asin}/#customerReviews"><span>See customer reviews</span></a>
+        <div class="price-recipe">
+          <span class="a-price"><span>$${price}</span></span>
+          ${discount}
+        </div>
+      </div>
+    </div>`;
+  await visit('https://www.amazon.com/s?k=headphones', `<html><body><a href="/cart">Cart</a>
+    ${amazonCard('B001', 'Wireless Noise Cancelling Headphones', '99.99', '<span class="a-text-price"><s>$199.99</s></span>')}
+    ${amazonCard('B002', 'Bluetooth Speaker Waterproof', '19.99', '<span class="savings">-50%</span>')}</body></html>`, { wait: 2000 });
+  const amazon = storage['s:amazon.com'];
+  check('Amazon items named after the product, not "See customer reviews"',
+    amazon?.items.length === 2 && amazon.items.every((i) => !/review|stars/i.test(i.title)), amazon?.items.map((i) => i.title));
+  check('Amazon item: headphones $99.99 was $199.99',
+    amazon?.items.some((i) => i.title === 'Wireless Noise Cancelling Headphones' && i.price === 99.99 && i.was === 199.99), amazon?.items);
+  const pdh = (() => { const w = new JSDOM('', { runScripts: 'outside-only' }).window; w.eval(SHARED); return w.PDH; })();
+  check('old items saved as "See customer reviews" are hidden', pdh.activeSale({ site: 'amazon.com', items: [
+    { title: 'See customer reviews', url: 'https://www.amazon.com/dp/1#customerReviews', price: 10, was: 20, percentOff: 50, seen: new Date().toISOString() }] }) === null);
+  delete storage['s:amazon.com'];
+
   // ---- Word matching: "today" is not "day"
   console.log('\nWord matching');
   const { wordMatch, isNonShopSite, activeSale } = (() => { const w = new JSDOM('', { runScripts: 'outside-only' }).window; w.eval(SHARED); return w.PDH; })();

@@ -23,7 +23,7 @@
 
   const {
     KEY_PREFIX, STORE_PREFIX, parsePrice, currencyFromText, formatPrice, keywords, wordMatch, isProductWord,
-    categoryWords, parseSaleText, today, siteOf, isNonShopSite, activeSale, saveStoreSale, describeSummary, getSettings, SOURCE_LABEL,
+    categoryWords, parseSaleText, today, siteOf, isNonShopSite, isNotAName, activeSale, saveStoreSale, describeSummary, getSettings, SOURCE_LABEL,
   } = globalThis.PDH;
 
   const MAX_SNAPSHOTS = 365;
@@ -340,10 +340,13 @@
 
   /** A link that carries a product name, not a button, price or discount label. */
   function isNameLink(a) {
-    if ((a.getAttribute('href') || '').startsWith('#')) return false;
+    const href = (a.getAttribute('href') || '').toLowerCase();
+    if (href.startsWith('#') || href.startsWith('javascript:')) return false;
+    // Review / rating links point at the product too (Amazon: "/dp/X#customerReviews").
+    if (/#(customer)?reviews|\/product-reviews\/|#ratings?\b/.test(href)) return false;
     const text = linkName(a);
     if (text.length < 3 || text.length > 150 || !/\p{L}{2}/u.test(text)) return false;
-    return !BUTTON_TEXT_RE.test(text);
+    return !BUTTON_TEXT_RE.test(text) && !isNotAName(text) && !isNotAName(a.getAttribute('aria-label'));
   }
 
   /** Climbs from an element to the smallest product card with a named product link. */

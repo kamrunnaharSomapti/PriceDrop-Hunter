@@ -244,13 +244,21 @@
     return Date.now() - new Date(summary.seen).getTime() < SALE_TTL_DAYS * DAY_MS;
   }
 
+  /**
+   * Link text that is never a product name: review and rating links ("See customer reviews",
+   * "4.5 out of 5 stars", "1,234 ratings") and other card links ("See options", "Visit the store").
+   */
+  const NOT_A_NAME_RE = /^(see (all )?(customer )?reviews?|(customer )?reviews?|write a review|[\d.,]+ out of 5( stars)?.*|[\d.,]+[kK]?\+? (ratings?|reviews?)|ratings?|see (more |all )?(options|buying choices|details)|more buying choices|visit the .* store|sponsored|best ?seller|amazon'?s choice|limited time deal)$/i;
+  const isNotAName = (text) => NOT_A_NAME_RE.test(String(text || '').trim());
+
   /** Items still fresh, summary still running. Returns null if nothing is left. */
   function activeSale(store) {
     if (!store) return null;
     // Old records saved before the non-shop check existed: keep only what the user added by hand.
     if (isNonShopSite(store.site) && store.summary?.source !== 'manual') return null;
     const cutoff = Date.now() - SALE_TTL_DAYS * DAY_MS;
-    const items = (store.items || []).filter((it) => new Date(it.seen).getTime() > cutoff);
+    // isNotAName: hides items saved under a review-link name before that was filtered out.
+    const items = (store.items || []).filter((it) => new Date(it.seen).getTime() > cutoff && !isNotAName(it.title));
     const summary = summaryActive(store.summary) ? store.summary : null;
     if (!items.length && !summary) return null;
     const maxOff = Math.max(summary?.percentOff || 0, ...items.map((it) => it.percentOff || 0));
@@ -337,7 +345,7 @@
     KEY_PREFIX, STORE_PREFIX, SETTINGS_KEY, SALE_TTL_DAYS, SOURCE_LABEL,
     asciiDigits, parsePrice, currencyFromText, formatPrice,
     stem, keywords, wordMatch, isProductWord, categoryWords,
-    parseSaleText, today, siteOf, isNonShopSite,
+    parseSaleText, today, siteOf, isNonShopSite, isNotAName,
     activeSale, saveStoreSale, describeSummary, getSettings,
   };
 })();
