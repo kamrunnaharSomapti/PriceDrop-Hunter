@@ -99,8 +99,13 @@
       .map(stem))];
   }
 
-  // "handbag" matches "bag", "kameez" matches "kameez".
-  const wordMatch = (a, b) => a === b || (b.length >= 3 && a.endsWith(b)) || (a.length >= 3 && b.endsWith(a));
+  // "handbag" matches "bag", "kameez" matches "kameez". A word only matches the end of a longer
+  // word when it is a product word, so "today" does not match "day" and "market" not "ket".
+  let productWords = null;
+  const isProductWord = (w) => (productWords ||= new Set(Object.values(CATEGORIES).flatMap((c) => c.words))).has(w);
+  const wordMatch = (a, b) => a === b ||
+    (b.length >= 3 && a.length > b.length && a.endsWith(b) && isProductWord(b)) ||
+    (a.length >= 3 && b.length > a.length && b.endsWith(a) && isProductWord(a));
 
   /**
    * Store categories -> product words. Used when a sale has no item list
@@ -209,6 +214,28 @@
   // ---------------------------------------------------------------------------
 
   const siteOf = (host) => String(host || '').replace(/^www\./, '').toLowerCase();
+
+  /**
+   * Sites that are never shops: search engines, video/social, mail, work tools, and local or
+   * private addresses (an ERPNext "Sales Order" on 127.0.0.1 is not a sale). Sales are never
+   * saved for these; suggestions can still show there.
+   */
+  const NON_SHOP_HOST_RE = new RegExp('(^|\\.)(' + [
+    'google\\.[a-z.]+', 'bing\\.com', 'duckduckgo\\.com', 'yahoo\\.com', 'yandex\\.[a-z]+', 'baidu\\.com', 'ecosia\\.org',
+    'youtube\\.com', 'youtu\\.be', 'instagram\\.com', 'twitter\\.com', 'x\\.com', 'tiktok\\.com', 'linkedin\\.com',
+    'reddit\\.com', 'pinterest\\.com', 'whatsapp\\.com', 'messenger\\.com', 'telegram\\.org',
+    'wikipedia\\.org', 'github\\.com', 'gitlab\\.com', 'stackoverflow\\.com', 'notion\\.so',
+    'chatgpt\\.com', 'openai\\.com', 'claude\\.ai', 'gemini\\.google\\.com', 'erpnext\\.com', 'frappe\\.cloud',
+  ].join('|') + ')$', 'i');
+
+  function isNonShopSite(site) {
+    const host = siteOf(String(site || '').split('/')[0]).replace(/:\d+$/, '');
+    if (!host) return true;
+    if (host === 'localhost' || /\.(localhost|local|test|internal|lan|home\.arpa)$/.test(host)) return true;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':') || host.startsWith('[')) return true; // IP addresses
+    if (!host.includes('.')) return true; // intranet names like "erp"
+    return NON_SHOP_HOST_RE.test(host);
+  }
   const urlKey = (u) => { try { const x = new URL(u); return x.origin + x.pathname.replace(/\/$/, ''); } catch { return u; } };
 
   function summaryActive(summary) {
@@ -220,6 +247,8 @@
   /** Items still fresh, summary still running. Returns null if nothing is left. */
   function activeSale(store) {
     if (!store) return null;
+    // Old records saved before the non-shop check existed: keep only what the user added by hand.
+    if (isNonShopSite(store.site) && store.summary?.source !== 'manual') return null;
     const cutoff = Date.now() - SALE_TTL_DAYS * DAY_MS;
     const items = (store.items || []).filter((it) => new Date(it.seen).getTime() > cutoff);
     const summary = summaryActive(store.summary) ? store.summary : null;
@@ -235,6 +264,7 @@
   async function saveStoreSale(update) {
     const site = siteOf(update.site);
     if (!site) return null;
+    if (isNonShopSite(site) && update.summary?.source !== 'manual') return null;
     const key = STORE_PREFIX + site;
     const stored = (await chrome.storage.local.get(key))[key];
     const now = new Date().toISOString();
@@ -306,8 +336,8 @@
   globalThis.PDH = {
     KEY_PREFIX, STORE_PREFIX, SETTINGS_KEY, SALE_TTL_DAYS, SOURCE_LABEL,
     asciiDigits, parsePrice, currencyFromText, formatPrice,
-    stem, keywords, wordMatch, categoryWords,
-    parseSaleText, today, siteOf,
+    stem, keywords, wordMatch, isProductWord, categoryWords,
+    parseSaleText, today, siteOf, isNonShopSite,
     activeSale, saveStoreSale, describeSummary, getSettings,
   };
 })();

@@ -207,6 +207,47 @@ async function main() {
   await visit('https://blog.example.com/trip', '<html><body><h1>My trip to the market</h1><p>Everything was 50% off at the bazaar.</p></body></html>', { wait: 4500 });
   check('blog post saves nothing', Object.keys(storage).length === before, Object.keys(storage));
 
+  // ---- Word matching: "today" is not "day"
+  console.log('\nWord matching');
+  const { wordMatch, isNonShopSite, activeSale } = (() => { const w = new JSDOM('', { runScripts: 'outside-only' }).window; w.eval(SHARED); return w.PDH; })();
+  check('"handbag" matches "bag"', wordMatch('handbag', 'bag'));
+  check('"today" does not match "day"', !wordMatch('today', 'day'));
+  check('"market" does not match "ket"', !wordMatch('market', 'ket'));
+  const now = new Date().toISOString();
+  storage['s:arogga.com'] = { site: 'arogga.com', keywords: [], items: [
+    { title: 'Skin Cafe All Day Moisturizer With Niacinamide 50ml', url: 'https://www.arogga.com/p/1', price: 700, was: 1000, percentOff: 30, seen: now }] };
+  ui = await visit('https://www.google.com/search?q=is+today+new+market+open', '<html><body></body></html>', { wait: 4500 });
+  check('Google "is today new market open" → nothing', ui.suggest === null, ui.suggest);
+  ui = await visit('https://www.google.com/search?q=niacinamide+moisturizer', '<html><body></body></html>');
+  check('Google "niacinamide moisturizer" → arogga', /arogga/.test(ui.suggest || ''), ui.suggest);
+
+  // ---- Sites that are not shops never get a store sale
+  console.log('\nNot shops');
+  check('google / youtube / 127.0.0.1 / localhost / intranet are not shops',
+    ['google.com', 'www.google.com.bd', 'youtube.com', '127.0.0.1', 'localhost', 'erp', 'erp.local'].every(isNonShopSite));
+  check('stores and Facebook pages are shops',
+    !['lerevecraze.com', 'arogga.com', 'facebook.com/yellowbd', 'shop.google-free.com'].some(isNonShopSite));
+  check('old youtube.com sale record is hidden',
+    activeSale({ site: 'youtube.com', items: [], summary: { source: 'ai', percentOff: 50, seen: now } }) === null);
+  check('a sale added by hand on such a site is kept',
+    !!activeSale({ site: '127.0.0.1', items: [], summary: { source: 'manual', percentOff: 0, seen: now } }));
+
+  storage.settings = { aiEnabled: true };
+  chrome.runtime.aiAnswer = { isSale: true, maxPercentOff: 20, upTo: false, endDate: null, productTypes: [], summary: 'Sales order' };
+  chrome.runtime.aiCalls.length = 0;
+  const erpHtml = '<html><body><h1>Sales Order SAL-ORD-0042</h1><h2>Discount 20% off on grand total</h2><button>Save</button></body></html>';
+  const storesNow = () => Object.keys(storage).filter((k) => k.startsWith('s:')).sort().join();
+  const storesBeforeErp = storesNow();
+  await visit('http://127.0.0.1:8000/app/sales-order/SAL-ORD-0042', erpHtml, { wait: 4500 });
+  await visit('https://erp.example.com/app/sales-order/SAL-ORD-0042', erpHtml, { wait: 4500 });
+  await visit('https://www.youtube.com/watch?v=1', '<html><body><h1>Diwali Dhamaka Sale: Flat 50% off</h1></body></html>', { wait: 4500 });
+  check('ERPNext sales order (local + own domain) and YouTube save nothing', storesNow() === storesBeforeErp, storesNow());
+  check('AI not asked on those pages', chrome.runtime.aiCalls.length === 0, chrome.runtime.aiCalls.map((c) => c.url));
+  await visit('https://shop.example.com/', '<html><body><h2>Winter sale: flat 30% off</h2><button>Add to cart</button></body></html>', { wait: 4500 });
+  check('a real shop banner still counts', storage['s:shop.example.com']?.summary?.percentOff === 30, storage['s:shop.example.com']);
+  storage.settings = { aiEnabled: false };
+  chrome.runtime.aiAnswer = null;
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 }

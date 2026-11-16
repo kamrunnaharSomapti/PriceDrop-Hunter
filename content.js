@@ -22,8 +22,8 @@
   window.__priceDropHunterLoaded = true;
 
   const {
-    KEY_PREFIX, STORE_PREFIX, parsePrice, currencyFromText, formatPrice, keywords, wordMatch,
-    categoryWords, parseSaleText, today, siteOf, activeSale, saveStoreSale, describeSummary, getSettings, SOURCE_LABEL,
+    KEY_PREFIX, STORE_PREFIX, parsePrice, currencyFromText, formatPrice, keywords, wordMatch, isProductWord,
+    categoryWords, parseSaleText, today, siteOf, isNonShopSite, activeSale, saveStoreSale, describeSummary, getSettings, SOURCE_LABEL,
   } = globalThis.PDH;
 
   const MAX_SNAPSHOTS = 365;
@@ -469,6 +469,21 @@
     return best;
   }
 
+  /**
+   * Store-wide sales (banners, AI) are only trusted on pages that look like a shop: a product,
+   * discounted items, or a cart / "add to cart" / "buy now". A blog, a news site or an ERP's
+   * "Sales Order" screen talks about sales without being one.
+   */
+  const SHOP_ACTION_RE = /add to (cart|bag|basket)|buy now|shop now|checkout|কার্টে|অর্ডার করুন|এখনই কিনুন/i;
+  function pageLooksLikeShop(product, saleItems) {
+    if (product || saleItems.length) return true;
+    if (document.querySelector('a[href*="/cart" i], a[href*="/basket" i], a[href*="/checkout" i], [class*="minicart" i], [class*="cart-count" i], [class*="cart-icon" i]')) return true;
+    for (const el of document.querySelectorAll('button, a, input[type="submit"]')) {
+      if (SHOP_ACTION_RE.test(el.textContent || el.value || '')) return true;
+    }
+    return false;
+  }
+
   // On-device AI (Chrome's built-in model), only when the rules found nothing.
   const AI_RECHECK_MS = 6 * 3600000;
   const PAGE_SALE_HINT_RE = /\b(sale|clearance)\b|\d{1,2}\s*%\s*off|\bdiscount|ছাড়|ছাড়|অফার|সেল/i;
@@ -781,7 +796,10 @@
     if (!source) return;
     const words = keywords(source).slice(0, 8);
     if (!words.length) return;
-    const results = await findMatchingSales(words, query ? 1 : 2);
+    // A typed search on a shop is about products. On Google/YouTube it may be anything
+    // ("is today new market open"), so ask for 2 shared words unless it names a product.
+    const general = query && isNonShopSite(location.hostname) && !words.some(isProductWord);
+    const results = await findMatchingSales(words, query && !general ? 1 : 2);
     if (!results.length) return;
 
     const { host, panel } = createPanel(SUGGEST_ID, { left: '16px', bottom: '16px' });
@@ -829,6 +847,12 @@
   let runToken = 0;
 
   async function processPage(token, tryIndex) {
+    // Search engines, YouTube, local tools (ERPNext on 127.0.0.1)...: never save sales, only suggest.
+    if (isNonShopSite(location.hostname)) {
+      if (tryIndex === 0 && currentSearchQuery()) await showSuggestions(null);
+      return true;
+    }
+
     const isLastTry = tryIndex === RETRY_DELAYS_MS.length - 1;
     const product = extractProduct();
     const saleItems = scanSaleItems();
@@ -855,7 +879,8 @@
     }
 
     const site = siteOf(location.hostname);
-    const banner = scanBanners();
+    const isShop = pageLooksLikeShop(product, saleItems);
+    const banner = isShop ? scanBanners() : null;
     if (saleItems.length || banner) {
       await saveStoreSale({
         site,
@@ -875,7 +900,7 @@
     if (token === runToken) await showSuggestions(product);
 
     // Rules found nothing, but the page talks about a sale: ask the on-device AI.
-    if (!product && !saleItems.length && !banner && token === runToken) {
+    if (isShop && !product && !saleItems.length && !banner && token === runToken) {
       aiReadPage().then(async (ai) => {
         if (!ai || token !== runToken) return;
         const summary = { percentOff: ai.maxPercentOff || 0, upTo: !!ai.upTo, endDate: ai.endDate || null,
