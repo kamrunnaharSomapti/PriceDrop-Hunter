@@ -35,6 +35,10 @@ when they're useful:
 
 There's no store list to set up. It works on any shop automatically.
 
+<p align="center">
+  <img src="docs/screenshots/popup-store-sales.png" width="360" alt="The PriceDrop Hunter popup on the Store sales tab, listing stores with sales it found automatically, such as up to 56% off and up to 20% off, with the on-device AI reader switched on at the bottom">
+</p>
+
 ## Privacy
 
 - Everything is stored in `chrome.storage.local`, in your own browser.
